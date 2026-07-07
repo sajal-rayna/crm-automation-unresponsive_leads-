@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Rayna Auto-Dialer — Options</title>
+  <style>
+    body {
+      max-width: 620px; margin: 24px auto; padding: 0 16px; color: #1d2330;
+      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    h1 { font-size: 18px; }
+    label { display: block; font-weight: 600; margin-top: 16px; }
+    .help { color: #667; font-weight: 400; font-size: 12.5px; margin-top: 2px; }
+    input[type="number"], input[type="text"], select {
+      width: 100%; padding: 7px 9px; margin-top: 5px; border: 1px solid #c6ccd8;
+      border-radius: 6px; font: inherit; box-sizing: border-box;
+    }
+    .check { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-top: 16px; }
+    .row { display: flex; gap: 10px; margin-top: 22px; }
+    button {
+      padding: 8px 18px; border-radius: 7px; border: 1px solid #c6ccd8;
+      background: #fff; font: inherit; font-weight: 600; cursor: pointer;
+    }
+    #save { background: #2458d6; border-color: #2458d6; color: #fff; }
+    #status { color: #178a4c; font-weight: 600; align-self: center; }
+    .note { background: #f4f6fa; border: 1px solid #dfe4ee; border-radius: 8px;
+      padding: 10px 12px; margin-top: 20px; color: #445; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Rayna Auto-Dialer — Options</h1>
+
+  <label>Ring timeout (ms)
+    <div class="help">Max wait in “Ringing” before auto-hangup as <b>No Answer</b>. Default 28000.</div>
+    <input type="number" id="RING_TIMEOUT_MS" min="5000" step="500" />
+  </label>
+
+  <label>Softphone poll interval (ms)
+    <div class="help">How often the call state is checked. Default 500.</div>
+    <input type="number" id="POLL_MS" min="200" step="100" />
+  </label>
+
+  <label>Max leads per session
+    <div class="help">0 = unlimited.</div>
+    <input type="number" id="MAX_LEADS" min="0" step="1" />
+  </label>
+
+  <label class="check">
+    <input type="checkbox" id="PREFILL_WHATSAPP_ON_MISS" />
+    Pre-fill the “If Not Answered” WhatsApp on voicemail / no-answer
+  </label>
+  <div class="help">Fills the message box only — you still press Send yourself.</div>
+
+  <label>WhatsApp mode
+    <div class="help">existing_tab: fill the composer in your open WhatsApp Web tab.
+      wa_link: open a web.whatsapp.com/send link that pre-fills the message.</div>
+    <select id="WHATSAPP_MODE">
+      <option value="existing_tab">existing_tab</option>
+      <option value="wa_link">wa_link</option>
+    </select>
+  </label>
+
+  <label>Gmail draft subject
+    <div class="help">The draft the Pre-stage step searches for and opens (never sends).</div>
+    <input type="text" id="GMAIL_DRAFT_SUBJECT" />
+  </label>
+
+  <div class="row">
+    <button id="save">Save</button>
+    <button id="reset">Restore defaults</button>
+    <span id="status"></span>
+  </div>
+
+  <div class="note">
+    Hotkeys (Voicemail / Live / Pre-stage / Skip / Resume / Quit) are configured at
+    <b>chrome://extensions/shortcuts</b>. Selectors and message templates live in
+    <b>config.js</b> inside the extension folder.
+  </div>
+
+  <script src="config.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

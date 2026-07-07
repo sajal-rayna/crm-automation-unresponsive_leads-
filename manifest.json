@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "name": "Rayna Auto-Dialer",
+  "version": "1.0.0",
+  "description": "Automates the repetitive parts of the Rayna CRM outbound-calling workflow. Personal load-unpacked tool: never logs in, never sends messages or emails.",
+  "minimum_chrome_version": "114",
+  "permissions": ["scripting", "storage", "sidePanel", "tabs", "commands"],
+  "host_permissions": [
+    "https://crm.rayna-properties.com/*",
+    "https://web.whatsapp.com/*",
+    "https://mail.google.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Rayna Auto-Dialer (open side panel)"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["https://crm.rayna-properties.com/*"],
+      "js": ["config.js", "content-crm.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["config.js", "content-whatsapp.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["config.js", "content-gmail.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "mark-voicemail": {
+      "suggested_key": { "default": "Alt+Shift+V" },
+      "description": "Connected call: it's voicemail (hang up, log Left Voicemail, next)"
+    },
+    "mark-live": {
+      "suggested_key": { "default": "Alt+Shift+L" },
+      "description": "Connected call: live human (freeze for manual handling)"
+    },
+    "prestage": {
+      "suggested_key": { "default": "Alt+Shift+P" },
+      "description": "Connected call: pre-stage WhatsApp + Gmail drafts (never sends)"
+    },
+    "skip-lead": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Connected call: hang up and advance without logging"
+    },
+    "resume-session": {
+      "description": "Resume dialing after a Live / Pre-stage / error freeze"
+    },
+    "quit-session": {
+      "description": "Stop the session (finishes logging the current lead first)"
+    }
+  }
+}

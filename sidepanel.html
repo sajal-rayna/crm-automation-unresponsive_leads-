@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Rayna Auto-Dialer</title>
+  <style>
+    :root {
+      --bg: #12151c; --card: #1b202b; --line: #2a3140; --text: #e6e9f0;
+      --dim: #8b93a7; --accent: #4f8cff; --ok: #34c07a; --warn: #e5a53a;
+      --err: #e05a5a; --violet: #9b7bff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 10px; background: var(--bg); color: var(--text);
+      font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    h1 { font-size: 14px; margin: 0; display: flex; align-items: center; gap: 8px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: none; }
+    .dot.on { background: var(--ok); }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+      padding: 8px 10px; margin-top: 8px;
+    }
+    .lead-name { font-size: 15px; font-weight: 600; }
+    .kv { color: var(--dim); }
+    .kv b { color: var(--text); font-weight: 500; }
+    #state-badge {
+      display: inline-block; padding: 2px 9px; border-radius: 999px;
+      font-weight: 600; font-size: 12px; background: var(--line); color: var(--text);
+    }
+    .st-idle { background: #333a47 !important; }
+    .st-work { background: #1d2f5c !important; color: #9dc0ff !important; }
+    .st-ring { background: #4a3a12 !important; color: #ffd479 !important; }
+    .st-conn { background: #123a26 !important; color: #7fe0ae !important; }
+    .st-frozen { background: #2c2350 !important; color: #c9b6ff !important; }
+    .st-err { background: #47201f !important; color: #ff9d9a !important; }
+    #timer { font-variant-numeric: tabular-nums; color: var(--dim); margin-left: 8px; }
+    .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    button {
+      flex: 1; min-width: 74px; padding: 7px 6px; border-radius: 7px;
+      border: 1px solid var(--line); background: #232a38; color: var(--text);
+      font: inherit; font-weight: 600; cursor: pointer;
+    }
+    button:hover:not(:disabled) { border-color: var(--accent); }
+    button:disabled { opacity: 0.38; cursor: default; }
+    button .hint { display: block; font-weight: 400; font-size: 10px; color: var(--dim); }
+    #btn-start { background: #17371f; border-color: #2c5a38; }
+    #btn-stop { background: #3a2020; border-color: #5a3030; }
+    #btn-resume { background: #2c2350; border-color: #4a3a86; }
+    #btn-voicemail { border-color: #4a5a86; }
+    #btn-live { background: #123a26; border-color: #2c6a48; }
+    #btn-prestage { background: #241f42; border-color: #443a72; }
+    #freeze-box { display: none; border-color: var(--violet); }
+    #freeze-box.error { border-color: var(--err); }
+    #freeze-msg { white-space: pre-wrap; }
+    details { margin-top: 6px; }
+    summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+    #call-script { white-space: pre-wrap; font-size: 12px; color: var(--dim); margin-top: 6px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+    td { padding: 2px 4px; color: var(--dim); }
+    td.n { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+    #log {
+      max-height: 180px; overflow-y: auto; font-family: ui-monospace, monospace;
+      font-size: 11px; margin-top: 4px;
+    }
+    .log-info { color: var(--dim); }
+    .log-ok { color: var(--ok); }
+    .log-warn { color: var(--warn); }
+    .log-error { color: var(--err); }
+    #no-crm { display: none; color: var(--warn); }
+    a { color: var(--accent); }
+    .foot { margin-top: 8px; color: var(--dim); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <h1><span class="dot" id="conn-dot"></span> Rayna Auto-Dialer</h1>
+
+  <div class="card" id="no-crm">
+    CRM tab / lead not found — open a <b>crm.rayna-properties.com/lead/…</b> page
+    and reload it, then reopen this panel.
+  </div>
+
+  <div class="card">
+    <div class="lead-name" id="lead-name">—</div>
+    <div class="kv">Phone: <b id="lead-phone">—</b></div>
+    <div class="kv">Email: <b id="lead-email">—</b></div>
+    <div class="kv">Campaign: <b id="lead-campaign">—</b></div>
+    <div class="kv">Queue: <b id="lead-counter">—</b></div>
+  </div>
+
+  <div class="card">
+    <span id="state-badge" class="st-idle">idle</span><span id="timer"></span>
+    <div class="kv" id="phase-detail"></div>
+    <div class="row">
+      <button id="btn-start">▶ Start</button>
+      <button id="btn-stop" disabled>■ Stop<span class="hint">finishes current lead</span></button>
+    </div>
+    <div class="row">
+      <button id="btn-voicemail" disabled>Voicemail<span class="hint">Alt+Shift+V</span></button>
+      <button id="btn-live" disabled>Live<span class="hint">Alt+Shift+L</span></button>
+      <button id="btn-prestage" disabled>Pre-stage<span class="hint">Alt+Shift+P</span></button>
+      <button id="btn-skip" disabled>Skip<span class="hint">Alt+Shift+S</span></button>
+    </div>
+  </div>
+
+  <div class="card" id="freeze-box">
+    <div id="freeze-msg"></div>
+    <details id="script-details">
+      <summary>Call-opening script (VRS)</summary>
+      <div id="call-script"></div>
+    </details>
+    <div class="row"><button id="btn-resume">⏵ Resume dialing</button></div>
+  </div>
+
+  <div class="card">
+    <b>Session tally</b>
+    <table>
+      <tr><td>Dialed</td><td class="n" id="t-dialed">0</td>
+          <td>No Answer</td><td class="n" id="t-noAnswer">0</td></tr>
+      <tr><td>Voicemail</td><td class="n" id="t-voicemail">0</td>
+          <td>Busy</td><td class="n" id="t-busy">0</td></tr>
+      <tr><td>Dropped</td><td class="n" id="t-dropped">0</td>
+          <td>Tech fail</td><td class="n" id="t-techFailure">0</td></tr>
+      <tr><td>Invalid</td><td class="n" id="t-invalid">0</td>
+          <td>Live</td><td class="n" id="t-live">0</td></tr>
+      <tr><td>Pre-staged</td><td class="n" id="t-prestaged">0</td>
+          <td>Skipped</td><td class="n" id="t-skipped">0</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <b>Log</b>
+    <div id="log"></div>
+  </div>
+
+  <div class="foot">
+    The tool never presses Send anywhere. Configure timeouts on the
+    <a href="#" id="open-options">options page</a>; hotkeys at
+    chrome://extensions/shortcuts.
+  </div>
+
+  <script src="config.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
