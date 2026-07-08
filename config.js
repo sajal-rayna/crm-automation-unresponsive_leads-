@@ -88,11 +88,12 @@ globalThis.RAYNA = (() => {
     // CampaignTag out of the Raw Source Data JSON text
     CAMPAIGN_TAG_RE: /CampaignTag"?\s*[:=]\s*"([^"]+)"/,
 
-    // Lead Information card field labels (exact element text, trimmed)
+    // Lead Information card field labels (exact element text, trimmed; the
+    // live CRM renders some with a trailing colon and/or uppercase)
     LEAD_FIELD_LABELS: {
-      name: /^(Full\s+)?Name$/i,
-      phone: /^Phone(\s+Number)?$/i,
-      email: /^Email(\s+Address)?$/i,
+      name: /^(Full\s+)?Name:?$/i,
+      phone: /^Phone(\s+Number)?:?$/i,
+      email: /^Email(\s+Address)?:?$/i,
     },
     // Fallback free-text matchers if the labeled lookup fails
     EMAIL_RE: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,

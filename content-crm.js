@@ -279,45 +279,70 @@
     return root;
   }
 
-  function scanForToken(root) {
+  // The lead page can contain PERMANENT text that matches the state tokens —
+  // e.g. a "Calling" chip on the phone number that is visible even while idle.
+  // So before dialing we baseline every token/timer element already on screen
+  // (with its text), and during the call only trust elements that APPEARED or
+  // whose text CHANGED after Call Now — the real softphone state always does.
+  function isBaselined(baseline, el) {
+    return !!baseline && baseline.has(el) && baseline.get(el) === textOf(el);
+  }
+
+  function tokenBaseline() {
+    const map = new Map();
+    const root = softphoneRoot(findButton(C.CRM.CALL_BUTTON_TEXT));
+    if (!root) return map;
+    for (const el of root.querySelectorAll('*')) {
+      const t = textOf(el);
+      if (!t || !isVisible(el)) continue;
+      if (el.childElementCount <= 1 && t.length <= 20 && C.CRM.STATE_TOKEN_RE.test(t)) {
+        map.set(el, t);
+      } else if (el.childElementCount === 0 && C.CRM.TIMER_RE.test(t)) {
+        map.set(el, t);
+      }
+    }
+    return map;
+  }
+
+  function scanForToken(root, baseline) {
     if (!root) return null;
     for (const el of root.querySelectorAll('*')) {
       if (el.childElementCount > 1) continue;
       const t = textOf(el);
       if (t.length === 0 || t.length > 20) continue;
-      if (C.CRM.STATE_TOKEN_RE.test(t) && isVisible(el)) {
+      if (C.CRM.STATE_TOKEN_RE.test(t) && isVisible(el) && !isBaselined(baseline, el)) {
         return { el, token: t.replace(/\.+$/, '') };
       }
     }
     return null;
   }
 
-  function findTimer(root) {
+  function findTimer(root, baseline) {
     if (!root) return null;
     for (const el of root.querySelectorAll('*')) {
       if (el.childElementCount > 0) continue;
       const t = textOf(el);
-      if (C.CRM.TIMER_RE.test(t) && isVisible(el)) return t;
+      if (C.CRM.TIMER_RE.test(t) && isVisible(el) && !isBaselined(baseline, el)) return t;
     }
     return null;
   }
 
   // -> { state: 'idle'|'ringing'|'connected'|'in_call'|'unknown', timer }
-  function readCallState() {
+  function readCallState(baseline) {
     const btn = findButton(C.CRM.CALL_BUTTON_TEXT);
     const btnText = btn ? textOf(btn) : '';
     const inCall = C.CRM.IN_CALL_TEXT.test(btnText);
     const root = softphoneRoot(btn);
-    const tokenHit = scanForToken(root);
+    const tokenHit = scanForToken(root, baseline);
     const token = tokenHit ? tokenHit.token : null;
 
     if (token && C.CRM.STATE_CONNECTED_RE.test(token)) {
-      return { state: 'connected', timer: findTimer(root) };
+      return { state: 'connected', timer: findTimer(root, baseline) };
     }
     if (inCall) {
       if (token) return { state: 'ringing', timer: null };
       // Timer running without a state token still means connected.
-      const timer = findTimer(root);
+      const timer = findTimer(root, baseline);
       if (timer) return { state: 'connected', timer };
       return { state: 'in_call', timer: null };
     }
@@ -492,7 +517,7 @@
   // Watch the softphone after dialing.
   // -> {kind:'connected'} | {kind:'no_answer'} | {kind:'toast', reason, text}
   //  | {kind:'ended_early', reason}
-  async function watchCall() {
+  async function watchCall(stateBaseline) {
     const t0 = Date.now();
     let sawActivity = false;
     let unknownSince = null;
@@ -506,7 +531,7 @@
       if (toast) return { kind: 'toast', reason: toast.reason, text: toast.text };
       collectUnmappedToast(freshAnyToast());
 
-      const cs = readCallState();
+      const cs = readCallState(stateBaseline);
       if (cs.state === 'connected') return { kind: 'connected' };
       if (cs.state === 'ringing' || cs.state === 'in_call') sawActivity = true;
 
@@ -838,6 +863,9 @@
     pushLog('info',
       `Lead ${lead.counter || '?'}: ${lead.name || '(no name)'} ${lead.phone || ''} — ${lead.campaignTag || 'no campaign tag'}`);
 
+    // Snapshot token/timer text already on screen (e.g. a static "Calling"
+    // chip on the phone number) BEFORE dialing, so it can't read as call state.
+    const stateBaseline = tokenBaseline();
     await clickCallNow();
     S.dialedCount += 1;
     S.tally.dialed += 1;
@@ -847,7 +875,7 @@
 
     let outcome;
     try {
-      outcome = await watchCall();
+      outcome = await watchCall(stateBaseline);
     } finally {
       stopTicker();
     }
