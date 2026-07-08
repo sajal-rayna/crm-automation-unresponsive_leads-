@@ -198,8 +198,15 @@
 
     let name = labeledValue(C.CRM.LEAD_FIELD_LABELS.name);
     if (!name) {
-      const h = document.querySelector('h1, h2');
-      name = h ? textOf(h) : '';
+      // Fallback: the most prominent heading that is NOT page chrome (the
+      // sidebar "Rayna CRM" logo is an h1 and comes first in the DOM).
+      for (const h of document.querySelectorAll('h1, h2')) {
+        const t = textOf(h);
+        if (!t || t.length < 2 || t.length > 80 || !isVisible(h)) continue;
+        if (C.CRM.NAME_HEADING_SKIP_RE.test(t)) continue;
+        name = t;
+        break;
+      }
     }
 
     let email = labeledValue(C.CRM.LEAD_FIELD_LABELS.email);
@@ -407,6 +414,12 @@
   // Status push to the side panel
   // ---------------------------------------------------------------------------
   function fullStatus() {
+    // The CRM is a single-page app: routes change without a reload, so a lead
+    // snapshot from page-load goes stale. While no session is running, re-read
+    // whatever lead is on screen every time status is requested.
+    if (!S.running) {
+      try { S.lead = extractLead(); } catch (e) { /* keep the last snapshot */ }
+    }
     return {
       running: S.running,
       phase: S.phase,

@@ -95,6 +95,10 @@ globalThis.RAYNA = (() => {
       phone: /^Phone(\s+Number)?:?$/i,
       email: /^Email(\s+Address)?:?$/i,
     },
+    // Page-chrome headings that must never be mistaken for the lead's name
+    // when falling back to the first h1/h2 (the sidebar logo is an h1).
+    NAME_HEADING_SKIP_RE:
+      /^(Rayna CRM|Caller Portal|Lead Detail|Lead Information|Activity|Raw Source|Lead Journey|Dashboard|My Queue|Callbacks|Assignments|Settings)/i,
     // Fallback free-text matchers if the labeled lookup fails
     EMAIL_RE: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
     PHONE_RE: /\+?\d[\d\s().-]{7,}\d/,
