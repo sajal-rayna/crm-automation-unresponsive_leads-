@@ -54,6 +54,10 @@ send WhatsApp/email, calendar, **Save Outcome**, **Next**) — then press **Resu
 Resume continues dialing **from whatever lead is on screen**; it never clicks Next
 for you past a frozen lead, so click Next yourself before resuming.
 
+The same applies to an **error pause** (red box): do the surfaced action manually,
+make sure the outcome is saved, and click **Next** if that lead is finished —
+*then* press Resume. Resuming with the same lead still on screen dials it again.
+
 ## Configuration (options page)
 
 | Setting | Default | Meaning |

@@ -68,6 +68,9 @@ const withTimeout = (p, ms, what) =>
 async function prestageWhatsApp(lead, waText, settings) {
   if (!lead.phone) return { ok: false, detail: 'lead has no phone — WhatsApp skipped' };
   const digits = lead.phone.replace(/\D/g, '');
+  if (digits.length < C.WA.MIN_PHONE_DIGITS) {
+    return { ok: false, detail: `lead phone "${lead.phone}" looks invalid — WhatsApp skipped` };
+  }
 
   if (settings.WHATSAPP_MODE === 'wa_link') {
     // wa_link mode: let WhatsApp itself pre-fill the composer via a /send link.
@@ -114,19 +117,36 @@ async function prestageGmail(lead, settings) {
   return res || { ok: false, detail: 'no response from Gmail tab' };
 }
 
+// MV3 kills an idle service worker after ~30s, and merely awaiting a content
+// script's sendResponse does NOT reset that clock. While a pre-stage is in
+// flight (up to ~90s), ping a trivial extension API to stay alive — otherwise
+// a hotkey-driven session with the side panel closed loses the orchestration
+// mid-flight and the CRM sees "message port closed".
+function keepAlive() {
+  const id = setInterval(() => {
+    try { chrome.runtime.getPlatformInfo(() => {}); } catch (e) { /* dying anyway */ }
+  }, 20000);
+  return () => clearInterval(id);
+}
+
 async function handlePrestage(msg) {
   const { lead, waText, channels } = msg;
-  const settings = msg.settings || (await C.getSettings());
-  const out = {};
-  if (channels.includes('wa')) {
-    try { out.wa = await prestageWhatsApp(lead, waText, settings); }
-    catch (e) { out.wa = { ok: false, detail: String(e && e.message || e) }; }
+  const stopKeepAlive = keepAlive();
+  try {
+    const settings = msg.settings || (await C.getSettings());
+    const out = {};
+    if (channels.includes('wa')) {
+      try { out.wa = await prestageWhatsApp(lead, waText, settings); }
+      catch (e) { out.wa = { ok: false, detail: String(e && e.message || e) }; }
+    }
+    if (channels.includes('gmail')) {
+      try { out.gmail = await prestageGmail(lead, settings); }
+      catch (e) { out.gmail = { ok: false, detail: String(e && e.message || e) }; }
+    }
+    return out;
+  } finally {
+    stopKeepAlive();
   }
-  if (channels.includes('gmail')) {
-    try { out.gmail = await prestageGmail(lead, settings); }
-    catch (e) { out.gmail = { ok: false, detail: String(e && e.message || e) }; }
-  }
-  return out;
 }
 
 // ---------------------------------------------------------------------------

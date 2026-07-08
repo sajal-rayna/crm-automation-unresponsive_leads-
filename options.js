@@ -23,8 +23,12 @@
       const def = C.DEFAULT_SETTINGS[key];
       if (el.type === 'checkbox') out[key] = el.checked;
       else if (typeof def === 'number') {
-        const n = parseInt(el.value, 10);
-        out[key] = Number.isFinite(n) ? n : def;
+        // Number() handles "2.8e4" etc. that parseInt would mangle; clamp to
+        // the input's min so e.g. POLL_MS=0 can't become a hot loop.
+        let n = Number(el.value);
+        if (!Number.isFinite(n)) n = def;
+        const min = el.min !== '' ? Number(el.min) : 0;
+        out[key] = Math.max(min, Math.round(n));
       } else out[key] = el.value.trim() || def;
     }
     await chrome.storage.sync.set(out);

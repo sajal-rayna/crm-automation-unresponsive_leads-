@@ -147,10 +147,10 @@
 
     let phone = labeledValue(C.CRM.LEAD_FIELD_LABELS.phone);
     if (phone) phone = (phone.match(C.CRM.PHONE_RE) || [phone])[0];
-    if (!phone || isIgnoredPhone(phone)) {
+    if (!phone || isIgnoredPhone(phone) || !plausiblePhone(phone)) {
       phone = '';
       for (const m of bodyText.matchAll(new RegExp(C.CRM.PHONE_RE.source, 'g'))) {
-        if (!isIgnoredPhone(m[0])) { phone = m[0].trim(); break; }
+        if (!isIgnoredPhone(m[0]) && plausiblePhone(m[0])) { phone = m[0].trim(); break; }
       }
     }
 
@@ -168,8 +168,19 @@
   }
 
   function isIgnoredPhone(p) {
-    const digits = String(p).replace(/\D/g, '');
-    return C.CRM.IGNORE_PHONES.some((ig) => ig.replace(/\D/g, '') === digits);
+    // Trailing-10-digit comparison so "(916) 222-2975" still matches the
+    // configured "+19162222975" caller line.
+    const tail = String(p).replace(/\D/g, '').slice(-10);
+    if (!tail) return true;
+    return C.CRM.IGNORE_PHONES.some(
+      (ig) => ig.replace(/\D/g, '').slice(-10) === tail);
+  }
+
+  function plausiblePhone(p) {
+    const s = String(p);
+    if (C.CRM.DATE_LIKE_RE.test(s)) return false; // "2025-07-08 14" is not a phone
+    const digits = s.replace(/\D/g, '');
+    return digits.length >= C.CRM.PHONE_MIN_DIGITS && digits.length <= 15;
   }
 
   function leadFingerprint() {
@@ -271,18 +282,23 @@
   const ANY_FAILURE_RE = new RegExp(
     C.TOAST_REASON_MAP.map((m) => m.re.source).join('|'), 'i');
 
-  // Ignores toasts that were already on screen when the watch began (stale
-  // toast from the previous lead). A stale text is forgiven again once it
-  // disappears, so an identical NEW toast for this call still counts.
-  function makeToastWatcher() {
-    const stale = new Set(visibleToasts(ANY_FAILURE_RE));
+  // Detects toasts that appeared AFTER the detector was created. Texts already
+  // on screen (stale, from the previous lead) are ignored — but forgiven once
+  // they disappear, so an identical NEW toast still counts.
+  function makeFreshToastDetector(re) {
+    const stale = new Set(visibleToasts(re));
     return () => {
-      const current = visibleToasts(ANY_FAILURE_RE);
+      const current = visibleToasts(re);
       for (const t of [...stale]) if (!current.includes(t)) stale.delete(t);
-      for (const t of current) {
-        if (!stale.has(t)) return matchFailureToast(t);
-      }
-      return null;
+      return current.find((t) => !stale.has(t)) || null;
+    };
+  }
+
+  function makeToastWatcher() {
+    const fresh = makeFreshToastDetector(ANY_FAILURE_RE);
+    return () => {
+      const t = fresh();
+      return t ? matchFailureToast(t) : null;
     };
   }
 
@@ -398,6 +414,7 @@
   async function watchCall() {
     const t0 = Date.now();
     let sawActivity = false;
+    let unknownSince = null;
     // Baseline the toasts already on screen so a leftover from the PREVIOUS
     // lead can never be attributed to this call.
     const freshFailureToast = makeToastWatcher();
@@ -409,6 +426,18 @@
       const cs = readCallState();
       if (cs.state === 'connected') return { kind: 'connected' };
       if (cs.state === 'ringing' || cs.state === 'in_call') sawActivity = true;
+
+      // Persistent 'unknown' (call button missing/relabeled) must pause, not
+      // ring out to a bogus No Answer while the line may still be open.
+      if (cs.state === 'unknown') {
+        if (!unknownSince) unknownSince = Date.now();
+        else if (Date.now() - unknownSince > C.CRM.DIAL_START_TIMEOUT_MS) {
+          throw new ActionError(
+            'read the softphone state (call button missing or relabeled — check CRM.CALL_BUTTON_TEXT in config.js)');
+        }
+      } else {
+        unknownSince = null;
+      }
 
       if (cs.state === 'idle') {
         if (sawActivity) {
@@ -458,9 +487,10 @@
     });
 
     // 3. Save Outcome (RSVP / PreferredDeveloper chips are never touched).
-    // Baseline confirm-looking toasts BEFORE clicking so a stale "...saved"
-    // from the previous lead can't satisfy this lead's confirmation.
-    const staleConfirms = new Set(visibleToasts(C.CRM.SAVE_CONFIRM_RE));
+    // The fresh-toast detector is created BEFORE clicking, so a confirm toast
+    // still lingering from the previous lead can't satisfy this lead — and its
+    // forgive-on-disappear logic means an identical new toast still counts.
+    const freshConfirm = makeFreshToastDetector(C.CRM.SAVE_CONFIRM_RE);
     await act('click "Save Outcome"', async () => {
       const btn = await waitFor(() => findButton(C.CRM.SAVE_OUTCOME_TEXT), 4000);
       if (!btn) throw new Error('Save Outcome button not found');
@@ -470,9 +500,7 @@
     // 4. Wait for a FRESH save confirmation (spec: "Save Outcome -> wait for
     // confirm"). Without one we pause rather than risk silently unlogged leads;
     // set CRM.REQUIRE_SAVE_CONFIRM=false in config.js if your CRM shows no toast.
-    const confirmed = await waitFor(
-      () => visibleToasts(C.CRM.SAVE_CONFIRM_RE).some((t) => !staleConfirms.has(t)),
-      C.CRM.SAVE_CONFIRM_TIMEOUT_MS, 250);
+    const confirmed = await waitFor(freshConfirm, C.CRM.SAVE_CONFIRM_TIMEOUT_MS, 250);
     if (!confirmed) {
       if (C.CRM.REQUIRE_SAVE_CONFIRM) {
         throw new ActionError(
@@ -699,9 +727,14 @@
           S.tally.errors += 1;
           // Safety rule: never continue past a failed selector — pause and
           // surface the intended action; the human fixes/does it, then Resumes.
+          // Resume redials whatever lead is on screen, so the instructions must
+          // say to finish this lead (incl. Next) first — otherwise a lead whose
+          // outcome was already saved would be dialed and logged twice.
           await freeze('error',
             `Selector failed — intended action: ${e.intended}. ` +
-            `Do it manually or fix config.js, then press Resume.`);
+            'Finish this lead by hand (do the action, make sure the outcome is ' +
+            'saved, and click Next if this lead is done), then press Resume — ' +
+            'dialing continues from the lead on screen.');
         } else {
           S.tally.errors += 1;
           await freeze('error', `Unexpected error: ${e && e.message}. Press Resume to continue.`);

@@ -89,6 +89,12 @@
   }
 
   async function fillChat(phoneDigits, text, leadName) {
+    // A short digit fragment (bad extraction) would false-match timestamps in
+    // chat previews — refuse to stage at all rather than risk the wrong chat.
+    if (!phoneDigits || phoneDigits.length < C.WA.MIN_PHONE_DIGITS) {
+      return { ok: false, detail: `lead phone "${phoneDigits || ''}" looks invalid — staging skipped` };
+    }
+
     // 1. Search for the lead's chat by phone number.
     const search = await waitForAny(C.WA.SEARCH_BOX, C.WA.STEP_TIMEOUT_MS);
     if (!search) return { ok: false, detail: 'WhatsApp search box not found (config.js WA.SEARCH_BOX)' };
@@ -115,6 +121,12 @@
     const composer = await waitForAny(C.WA.COMPOSER, C.WA.STEP_TIMEOUT_MS);
     if (!composer) {
       return { ok: false, detail: 'WhatsApp composer not found (config.js WA.COMPOSER)' };
+    }
+    // Never overwrite something already drafted in this chat (the operator may
+    // have typed there, or an earlier pre-stage already ran).
+    const existing = textOf(composer);
+    if (existing && existing !== text) {
+      return { ok: false, detail: 'this chat already has a drafted message — review it manually, nothing overwritten' };
     }
     insertText(composer, text);
     return { ok: true, detail: 'message staged — attach the flyer and press Send yourself' };

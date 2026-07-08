@@ -60,7 +60,17 @@
       const have = (field.value || '').trim().toLowerCase();
       const match = have === want ||
         (have.length >= 12 && (have.includes(want) || want.includes(have)));
-      if (match) return field.closest('div[role="dialog"]') || document;
+      if (!match) continue;
+      const dialog = field.closest('div[role="dialog"]');
+      if (dialog) return dialog;
+      // Full-screen/inline compose: scope to an ancestor of the verified
+      // subject field — NEVER the whole document, or the To/body edits could
+      // land in some other open compose window.
+      let node = field;
+      for (let i = 0; i < 8 && node.parentElement && node.parentElement !== document.body; i++) {
+        node = node.parentElement;
+      }
+      return node;
     }
     return null;
   }
@@ -88,11 +98,33 @@
     return null;
   }
 
+  function chippedRecipients(dialog) {
+    const out = [];
+    for (const sel of C.GMAIL.RECIPIENT_CHIP) {
+      for (const el of dialog.querySelectorAll(sel)) {
+        const v = (el.getAttribute('email') || el.getAttribute('data-hovercard-id') || '')
+          .trim().toLowerCase();
+        if (v.includes('@') && !out.includes(v)) out.push(v);
+      }
+    }
+    return out;
+  }
+
   async function setToField(dialog, email) {
     const to = allVisible(C.GMAIL.TO_FIELD, dialog)[0];
-    if (!to) return false;
-    // If the recipient is already chipped in, leave the field alone.
-    if (textOf(dialog).includes(email)) return true;
+    if (!to) return { ok: false, note: `To field not found — add ${email} manually` };
+    // A reused compose window may still carry the PREVIOUS lead's chip; adding
+    // ours next to it would address the email to both. Never type alongside an
+    // existing recipient — surface it for manual cleanup instead.
+    const chips = chippedRecipients(dialog);
+    if (chips.includes(email.toLowerCase())) return { ok: true, note: `To already set to ${email}` };
+    if (chips.length) {
+      return {
+        ok: false,
+        note: `another recipient is already in To (${chips.join(', ')}) — clear it and add ${email} manually`,
+      };
+    }
+    if (textOf(dialog).includes(email)) return { ok: true, note: `To already set to ${email}` };
     to.focus();
     if ('value' in to) {
       const proto = Object.getPrototypeOf(to);
@@ -106,7 +138,7 @@
     // Blur commits the chip — no Enter keystroke needed (or wanted).
     to.blur();
     await sleep(400);
-    return true;
+    return { ok: true, note: `To set to ${email}` };
   }
 
   function personalizeBody(dialog, firstName) {
@@ -164,13 +196,13 @@
 
       // 3. To = lead email; 4. personalize "Dear [FirstName]," — both scoped
       // to the verified dialog, both best-effort.
-      const toOk = await setToField(dialog, email);
+      const toRes = await setToField(dialog, email);
       const nameOk = personalizeBody(dialog, firstName);
 
       const parts = [];
-      parts.push(toOk ? `To set to ${email}` : `could NOT set To (add ${email} manually)`);
+      parts.push(toRes.note);
       parts.push(nameOk ? 'salutation personalized' : 'no [FirstName] token found — check salutation');
-      return { ok: toOk, detail: `draft opened; ${parts.join('; ')}. Review and press Send yourself` };
+      return { ok: toRes.ok, detail: `draft opened; ${parts.join('; ')}. Review and press Send yourself` };
     } catch (e) {
       // Isolation per spec: any failure -> just open the Drafts view.
       openDraftsFallback();

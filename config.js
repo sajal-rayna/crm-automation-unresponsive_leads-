@@ -85,7 +85,12 @@ globalThis.RAYNA = (() => {
     // Fallback free-text matchers if the labeled lookup fails
     EMAIL_RE: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
     PHONE_RE: /\+?\d[\d\s().-]{7,}\d/,
-    // Numbers to never mistake for the lead's phone (our own Twilio caller line)
+    // A fallback match only counts as a phone if it has enough digits and
+    // doesn't look like a date (activity feeds are full of both).
+    PHONE_MIN_DIGITS: 9,
+    DATE_LIKE_RE: /\d{4}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.]\d{2,4}/,
+    // Numbers to never mistake for the lead's phone (our own Twilio caller
+    // line) — compared on the trailing 10 digits so formatting can't leak it.
     IGNORE_PHONES: ['+19162222975'],
 
     // Log Call Outcome panel
@@ -144,6 +149,9 @@ globalThis.RAYNA = (() => {
     // A search-result row is only clicked if its text matches the lead: either
     // this many trailing phone digits appear in the row, or the lead's name does.
     ROW_MATCH_MIN_DIGITS: 7,
+    // Refuse to stage at all for a phone with fewer digits than this (a short
+    // fragment would false-match timestamps in chat previews).
+    MIN_PHONE_DIGITS: 9,
     STEP_TIMEOUT_MS: 10000,
   };
 
@@ -163,6 +171,8 @@ globalThis.RAYNA = (() => {
     RESULT_ROW: ['tr.zA', 'table[role="grid"] tr[role="row"]'],
     COMPOSE_DIALOG: ['div[role="dialog"]'],
     SUBJECT_FIELD: ['input[name="subjectbox"]', 'input[aria-label*="Subject" i]'],
+    // Recipient chips already committed in a compose's To line
+    RECIPIENT_CHIP: ['[email]', '[data-hovercard-id]'],
     TO_FIELD: [
       'div[role="dialog"] input[aria-label*="To" i]',
       'div[role="dialog"] input[peoplekit-id]',
