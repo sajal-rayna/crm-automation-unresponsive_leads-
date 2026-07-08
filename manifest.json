@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Automates the repetitive parts of the Rayna CRM outbound-calling workflow. Personal load-unpacked tool: never logs in, never sends messages or emails.",
   "minimum_chrome_version": "114",
-  "permissions": ["scripting", "storage", "sidePanel", "tabs", "commands"],
+  "permissions": ["scripting", "storage", "sidePanel", "tabs"],
   "host_permissions": [
     "https://crm.rayna-properties.com/*",
     "https://web.whatsapp.com/*",

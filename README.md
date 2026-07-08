@@ -95,12 +95,24 @@ rayna-autodialer/
 
 ## Behaviour notes
 
+- Softphone state/timer are read only inside the softphone panel (found by climbing up
+  from the call button, stopping before the Log Call Outcome panel) — never from the
+  whole page, so the outcome toggle's own labels can never masquerade as call state.
+  If auto-detection struggles, pin it with `CRM.SOFTPHONE_CONTAINER` in config.js.
+- Failure toasts already on screen when a call starts are ignored (a leftover toast from
+  the previous lead cannot be attributed to the next call).
 - A call that ends while still ringing with no failure toast (e.g. declined) is logged
   with `CRM.RING_ENDED_EARLY_REASON` (default **No Answer**) — change it in config.js.
-- After Save Outcome the tool waits up to 6 s for a confirmation toast; if the CRM shows
-  none it warns in the log and continues rather than pausing every lead.
-- If the softphone never leaves idle after Call Now, the tool pauses (it will not
-  mis-log a lead that was never dialed).
+- After Save Outcome the tool waits up to 8 s for a *fresh* confirmation toast and
+  **pauses** if none appears (a failing save can never silently skip leads). If your CRM
+  saves without any toast, set `CRM.REQUIRE_SAVE_CONFIRM = false` or fix
+  `CRM.SAVE_CONFIRM_RE` in config.js.
+- If the softphone never leaves idle after Call Now, or a hang-up doesn't take, the tool
+  pauses (it will not mis-log a lead that was never dialed or still on the line).
+- WhatsApp pre-stage only opens a search result that verifiably matches the lead (trailing
+  phone digits or the lead's name in the row) — never "the first row".
+- Gmail pre-stage only edits the compose window whose Subject matches
+  `GMAIL_DRAFT_SUBJECT`; a pre-existing unrelated compose window is never touched.
 
 ## Troubleshooting
 

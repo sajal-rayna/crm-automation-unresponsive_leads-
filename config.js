@@ -60,6 +60,16 @@ globalThis.RAYNA = (() => {
     STATE_CONNECTED_RE: /^Connected$/i,
     TIMER_RE: /^\d{1,2}:\d{2}$/, // MM:SS call timer
 
+    // State/timer are read ONLY inside the softphone panel — never the whole
+    // page (the outcome toggle has its own "Connected" label, and timestamps
+    // elsewhere would read as call timers). The panel is located by climbing
+    // ancestors of the call button; the climb stops before any container that
+    // includes the Log Call Outcome panel (OUTCOME_PANEL_MARKER). If your CRM
+    // needs it, pin the panel explicitly with a CSS selector here instead:
+    SOFTPHONE_CONTAINER: null,      // e.g. '.softphone-panel' (null = auto-climb)
+    SOFTPHONE_MAX_CLIMB: 6,         // max ancestors above the call button
+    OUTCOME_PANEL_MARKER: /Did you connect/i,
+
     // Queue position, e.g. "33 of 156"
     COUNTER_RE: /(\d+)\s+of\s+(\d+)/,
 
@@ -89,7 +99,12 @@ globalThis.RAYNA = (() => {
       '[role="alert"], [role="status"], [class*="toast" i], [class*="Toastify"],' +
       ' [class*="snackbar" i], [class*="notification" i]',
     SAVE_CONFIRM_RE: /saved|success|updated|logged/i,
-    SAVE_CONFIRM_TIMEOUT_MS: 6000,
+    SAVE_CONFIRM_TIMEOUT_MS: 8000,
+    // Spec: "Save Outcome -> wait for confirm". With true (default) the engine
+    // PAUSES if no fresh confirmation toast appears, so a failing save can
+    // never silently skip leads. Set false only if your CRM saves without any
+    // toast at all (the engine then warns and continues).
+    REQUIRE_SAVE_CONFIRM: true,
 
     // If a ringing call ends with no toast (e.g. declined), log this Reason:
     RING_ENDED_EARLY_REASON: 'No Answer',
@@ -126,6 +141,9 @@ globalThis.RAYNA = (() => {
       'div[contenteditable="true"][aria-placeholder="Type a message"]',
       '[data-testid="conversation-compose-box-input"]',
     ],
+    // A search-result row is only clicked if its text matches the lead: either
+    // this many trailing phone digits appear in the row, or the lead's name does.
+    ROW_MATCH_MIN_DIGITS: 7,
     STEP_TIMEOUT_MS: 10000,
   };
 
@@ -144,6 +162,7 @@ globalThis.RAYNA = (() => {
       '#search/' + encodeURIComponent(`in:draft subject:"${subject}"`),
     RESULT_ROW: ['tr.zA', 'table[role="grid"] tr[role="row"]'],
     COMPOSE_DIALOG: ['div[role="dialog"]'],
+    SUBJECT_FIELD: ['input[name="subjectbox"]', 'input[aria-label*="Subject" i]'],
     TO_FIELD: [
       'div[role="dialog"] input[aria-label*="To" i]',
       'div[role="dialog"] input[peoplekit-id]',
@@ -204,8 +223,8 @@ globalThis.RAYNA = (() => {
       "and not wait for the webinar next month we could have the same scheduled for you. " +
       "(Small Pause) So, (Client's Name), I just wanted to check if I can confirm your " +
       "participation for the webinar on 25th July? If Yes, Any preferred developer.\n\n" +
-      "Developer time slots (US Central): Mantra 11:00 AM · Emaar 11:45 AM · Nakheel " +
-      "12:45 PM · Damac 1:30 PM · Binghatti 2:15 PM · Sobha 3:00 PM · Danube 3:45 PM.\n\n" +
+      "Developer time slots (US Central): Mantra 11:00 AM, Emaar 11:45 AM, Nakheel " +
+      "12:45 PM, Damac 1:30 PM, Binghatti 2:15 PM, Sobha 3:00 PM, Danube 3:45 PM.\n\n" +
       "Close: Perfect! I'll have your registration confirmed and share a calendar invite " +
       "with you shortly. Right after this call I'll also be sending you the invite with " +
       "brief details and we will send you reminders before the webinar along with the " +

@@ -78,7 +78,12 @@ async function prestageWhatsApp(lead, waText, settings) {
   const tab = await findTab(C.WA.TAB_URL_PATTERN);
   if (!tab) return { ok: false, detail: 'WhatsApp Web tab not open — open web.whatsapp.com' };
   const res = await withTimeout(
-    sendToTab(tab.id, { type: C.MSG.WA_FILL, phone: digits, text: waText }),
+    sendToTab(tab.id, {
+      type: C.MSG.WA_FILL,
+      phone: digits,
+      text: waText,
+      leadName: lead.name || '',
+    }),
     25000, 'WhatsApp pre-stage');
   return res || { ok: false, detail: 'no response from WhatsApp tab' };
 }

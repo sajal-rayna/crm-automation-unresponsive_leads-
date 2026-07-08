@@ -33,7 +33,7 @@
     paused_error: ['st-err', 'PAUSED — error'],
   };
 
-  let renderedLogCount = 0;
+  let renderedLogKey = '';
   let lastStatusAt = 0;
 
   function sendCmd(cmd) {
@@ -71,7 +71,6 @@
 
     const [cls, label] = PHASE_STYLE[st.phase] || ['st-idle', st.phase];
     els.badge.className = cls;
-    els.badge.id = 'state-badge';
     els.badge.textContent = label;
     els.timer.textContent =
       (st.phase === 'connected' || st.phase === 'ringing' || st.phase === 'dialing')
@@ -103,8 +102,11 @@
   }
 
   function renderLogs(logs) {
-    // Logs arrive as the engine's full ring buffer; re-render only on growth/reset.
-    if (logs.length === renderedLogCount) return;
+    // Logs arrive as a capped slice, so length alone can't detect new lines —
+    // key on the last entry's identity too.
+    const last = logs[logs.length - 1];
+    const key = `${logs.length}|${last ? last.t + last.text : ''}`;
+    if (key === renderedLogKey) return;
     els.log.innerHTML = '';
     for (const line of logs) {
       const div = document.createElement('div');
@@ -114,7 +116,7 @@
       div.textContent = `${hh} ${line.text}`;
       els.log.appendChild(div);
     }
-    renderedLogCount = logs.length;
+    renderedLogKey = key;
     els.log.scrollTop = els.log.scrollHeight;
   }
 

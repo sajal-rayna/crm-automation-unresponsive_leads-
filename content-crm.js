@@ -179,21 +179,32 @@
 
   // ---------------------------------------------------------------------------
   // Softphone state reading (state text + timer ONLY — never the toggle)
+  //
+  // HARD SAFETY RULE: tokens/timers are read ONLY inside the softphone panel.
+  // The Log Call Outcome toggle carries its own "Connected"/"Not Connected"
+  // labels and the page has other timestamps, so a whole-page scan would let
+  // the toggle masquerade as call state. The panel is the call button's
+  // ancestry, capped at SOFTPHONE_MAX_CLIMB levels and cut off before any
+  // container that includes the outcome panel (OUTCOME_PANEL_MARKER).
   // ---------------------------------------------------------------------------
-  let statePanelCache = null; // parent of the last state-token element we found
-
-  function findStateToken() {
-    // Fast path: re-read from the cached panel.
-    if (statePanelCache && statePanelCache.isConnected) {
-      const hit = scanForToken(statePanelCache);
-      if (hit) return hit;
+  function softphoneRoot(btn) {
+    if (C.CRM.SOFTPHONE_CONTAINER) {
+      const pinned = document.querySelector(C.CRM.SOFTPHONE_CONTAINER);
+      if (pinned) return pinned;
     }
-    const hit = scanForToken(document.body);
-    if (hit) statePanelCache = hit.el.parentElement || document.body;
-    return hit;
+    if (!btn) return null;
+    let root = btn;
+    let node = btn.parentElement;
+    for (let i = 0; node && node !== document.body && i < C.CRM.SOFTPHONE_MAX_CLIMB; i++) {
+      if (C.CRM.OUTCOME_PANEL_MARKER.test(node.innerText || '')) break;
+      root = node;
+      node = node.parentElement;
+    }
+    return root;
   }
 
   function scanForToken(root) {
+    if (!root) return null;
     for (const el of root.querySelectorAll('*')) {
       if (el.childElementCount > 1) continue;
       const t = textOf(el);
@@ -205,17 +216,12 @@
     return null;
   }
 
-  function findTimer() {
-    const root = statePanelCache && statePanelCache.isConnected ? statePanelCache : null;
-    for (const scope of [root, document.body]) {
-      if (!scope) continue;
-      for (const el of scope.querySelectorAll('*')) {
-        if (el.childElementCount > 0) continue;
-        const t = textOf(el);
-        if (C.CRM.TIMER_RE.test(t) && isVisible(el)) return t;
-      }
-      if (root && scope === root) continue;
-      break;
+  function findTimer(root) {
+    if (!root) return null;
+    for (const el of root.querySelectorAll('*')) {
+      if (el.childElementCount > 0) continue;
+      const t = textOf(el);
+      if (C.CRM.TIMER_RE.test(t) && isVisible(el)) return t;
     }
     return null;
   }
@@ -225,17 +231,18 @@
     const btn = findButton(C.CRM.CALL_BUTTON_TEXT);
     const btnText = btn ? textOf(btn) : '';
     const inCall = C.CRM.IN_CALL_TEXT.test(btnText);
-    const tokenHit = findStateToken();
+    const root = softphoneRoot(btn);
+    const tokenHit = scanForToken(root);
     const token = tokenHit ? tokenHit.token : null;
 
     if (token && C.CRM.STATE_CONNECTED_RE.test(token)) {
-      return { state: 'connected', timer: findTimer() };
+      return { state: 'connected', timer: findTimer(root) };
     }
     if (inCall) {
-      // Timer running without a "Connected" token still means connected.
-      const timer = findTimer();
-      if (timer) return { state: 'connected', timer };
       if (token) return { state: 'ringing', timer: null };
+      // Timer running without a state token still means connected.
+      const timer = findTimer(root);
+      if (timer) return { state: 'connected', timer };
       return { state: 'in_call', timer: null };
     }
     if (token) return { state: 'ringing', timer: null };
@@ -243,23 +250,40 @@
     return { state: 'unknown', timer: null };
   }
 
-  function scanFailureToast() {
+  // All visible toast texts matching `re` (used for both failure + confirm toasts).
+  function visibleToasts(re) {
+    const out = [];
     for (const el of document.querySelectorAll(C.CRM.TOAST_SELECTOR)) {
       if (!isVisible(el)) continue;
       const t = textOf(el);
-      if (!t) continue;
-      for (const m of C.TOAST_REASON_MAP) {
-        if (m.re.test(t)) return { reason: m.reason, text: t };
-      }
+      if (t && re.test(t)) out.push(t);
+    }
+    return out;
+  }
+
+  function matchFailureToast(text) {
+    for (const m of C.TOAST_REASON_MAP) {
+      if (m.re.test(text)) return { reason: m.reason, text };
     }
     return null;
   }
 
-  function saveConfirmSeen() {
-    for (const el of document.querySelectorAll(C.CRM.TOAST_SELECTOR)) {
-      if (isVisible(el) && C.CRM.SAVE_CONFIRM_RE.test(textOf(el))) return true;
-    }
-    return false;
+  const ANY_FAILURE_RE = new RegExp(
+    C.TOAST_REASON_MAP.map((m) => m.re.source).join('|'), 'i');
+
+  // Ignores toasts that were already on screen when the watch began (stale
+  // toast from the previous lead). A stale text is forgiven again once it
+  // disappears, so an identical NEW toast for this call still counts.
+  function makeToastWatcher() {
+    const stale = new Set(visibleToasts(ANY_FAILURE_RE));
+    return () => {
+      const current = visibleToasts(ANY_FAILURE_RE);
+      for (const t of [...stale]) if (!current.includes(t)) stale.delete(t);
+      for (const t of current) {
+        if (!stale.has(t)) return matchFailureToast(t);
+      }
+      return null;
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -357,12 +381,14 @@
   async function endCall() {
     const btn = findButton(C.CRM.CALL_BUTTON_TEXT);
     if (!btn || !C.CRM.IN_CALL_TEXT.test(textOf(btn))) return; // already idle
-    await act('click "End Call"', async () => {
+    await act('hang up the call (End Call)', async () => {
       btn.click();
-      await waitFor(() => {
+      const backToIdle = await waitFor(() => {
         const b = findButton(C.CRM.CALL_BUTTON_TEXT);
         return b && C.CRM.CALL_NOW_TEXT.test(textOf(b));
       }, 8000);
+      // Never log/advance while the line might still be open — pause instead.
+      if (!backToIdle) throw new Error('button never returned to "Call Now"');
     });
   }
 
@@ -372,9 +398,12 @@
   async function watchCall() {
     const t0 = Date.now();
     let sawActivity = false;
+    // Baseline the toasts already on screen so a leftover from the PREVIOUS
+    // lead can never be attributed to this call.
+    const freshFailureToast = makeToastWatcher();
     setPhase('ringing');
     while (true) {
-      const toast = scanFailureToast();
+      const toast = freshFailureToast();
       if (toast) return { kind: 'toast', reason: toast.reason, text: toast.text };
 
       const cs = readCallState();
@@ -385,7 +414,7 @@
         if (sawActivity) {
           // Call ended while ringing with no toast (declined / remote hangup).
           await sleep(S.settings.POLL_MS); // give a late toast one more chance
-          const late = scanFailureToast();
+          const late = freshFailureToast();
           if (late) return { kind: 'toast', reason: late.reason, text: late.text };
           return { kind: 'ended_early', reason: C.CRM.RING_ENDED_EARLY_REASON };
         }
@@ -429,16 +458,30 @@
     });
 
     // 3. Save Outcome (RSVP / PreferredDeveloper chips are never touched).
+    // Baseline confirm-looking toasts BEFORE clicking so a stale "...saved"
+    // from the previous lead can't satisfy this lead's confirmation.
+    const staleConfirms = new Set(visibleToasts(C.CRM.SAVE_CONFIRM_RE));
     await act('click "Save Outcome"', async () => {
       const btn = await waitFor(() => findButton(C.CRM.SAVE_OUTCOME_TEXT), 4000);
       if (!btn) throw new Error('Save Outcome button not found');
       btn.click();
     });
 
-    // 4. Wait for a save confirmation. If the CRM shows none, warn and continue
-    // (pausing every lead would make the tool unusable on a silent CRM).
-    const confirmed = await waitFor(saveConfirmSeen, C.CRM.SAVE_CONFIRM_TIMEOUT_MS, 250);
-    if (!confirmed) pushLog('warn', 'No save confirmation toast seen — continuing');
+    // 4. Wait for a FRESH save confirmation (spec: "Save Outcome -> wait for
+    // confirm"). Without one we pause rather than risk silently unlogged leads;
+    // set CRM.REQUIRE_SAVE_CONFIRM=false in config.js if your CRM shows no toast.
+    const confirmed = await waitFor(
+      () => visibleToasts(C.CRM.SAVE_CONFIRM_RE).some((t) => !staleConfirms.has(t)),
+      C.CRM.SAVE_CONFIRM_TIMEOUT_MS, 250);
+    if (!confirmed) {
+      if (C.CRM.REQUIRE_SAVE_CONFIRM) {
+        throw new ActionError(
+          `confirm the outcome save (no confirmation toast after "${reason}" — ` +
+          'check the outcome saved, or set CRM.REQUIRE_SAVE_CONFIRM=false / fix ' +
+          'CRM.SAVE_CONFIRM_RE in config.js)');
+      }
+      pushLog('warn', 'No save confirmation toast seen — continuing');
+    }
 
     pushLog('ok', `Logged: ${reason}`);
   }
@@ -680,7 +723,14 @@
   function requestStop() {
     if (!S.running) return;
     S.stopRequested = true;
-    pushLog('info', 'Stop requested — finishing the current lead first');
+    if (pendingResume) {
+      // Stopping while frozen ends the session in place — no logging, no
+      // advancing happens after a freeze, so nothing is skipped.
+      pushLog('info', 'Stop requested while frozen — ending the session');
+      pendingResume.resolve();
+    } else {
+      pushLog('info', 'Stop requested — finishing the current lead first');
+    }
   }
 
   function handleDecision(action) {
