@@ -77,7 +77,41 @@
     <b>config.js</b> inside the extension folder.
   </div>
 
+  <h2 style="margin-top:32px">Self-learning</h2>
+  <label class="check">
+    <input type="checkbox" id="learn-enabled" />
+    Learn from my live actions
+  </label>
+  <div class="help">
+    When a selector fails and you do the action manually during the pause, the click is
+    learned as a fallback. Unrecognized failure toasts are collected below for you to map.
+    Answered-call ring times are recorded to suggest a better ring timeout. Everything is
+    stored only in this browser and never learns Send buttons or judgment steps.
+  </div>
+
+  <div class="note" id="ring-stats" style="display:none"></div>
+
+  <h3>Learned selector fallbacks</h3>
+  <div class="help">Captured from your clicks during "Selector failed" pauses on the CRM.</div>
+  <table id="learned-selectors" style="width:100%; border-collapse:collapse; margin-top:8px"></table>
+  <div class="help" id="no-selectors">Nothing learned yet.</div>
+
+  <h3>Unrecognized failure toasts</h3>
+  <div class="help">Toasts seen during calls that matched no known Reason. Pick a Reason to
+    teach the auto-logger; mapped toasts are then handled like built-in ones.</div>
+  <table id="toast-seen" style="width:100%; border-collapse:collapse; margin-top:8px"></table>
+  <div class="help" id="no-toasts">None collected yet.</div>
+
+  <h3>Approved toast &rarr; Reason mappings</h3>
+  <table id="toast-map" style="width:100%; border-collapse:collapse; margin-top:8px"></table>
+  <div class="help" id="no-mappings">No approved mappings yet.</div>
+
+  <div class="row">
+    <button id="forget-all">Forget all learned data</button>
+  </div>
+
   <script src="config.js"></script>
+  <script src="learning.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

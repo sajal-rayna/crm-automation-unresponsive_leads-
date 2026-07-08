@@ -97,6 +97,34 @@ rayna-autodialer/
 - Reason labels (exact): No Answer, Busy, Left Voicemail, Call Dropped, Technical Failure, Wrong Number, Invalid / Not in Service
 - Not Connected toggle, Save Outcome, Next: by visible text/role
 
+## Self-learning loop
+
+The tool learns from live actions you perform — never from guesses of its own. All
+learned data stays in `chrome.storage.local` in this browser; the options page shows
+everything and every item has a Forget button (plus a master on/off toggle and a
+"Forget all" button).
+
+1. **Selector healing (teach-on-pause).** When a CRM selector fails, the session pauses
+   as usual — but now the click you make to perform the action manually is captured and
+   learned as a *fallback* for that action (Not Connected toggle, Reason dropdown
+   trigger, each Reason option, Save Outcome, Next). The original config.js selector is
+   always tried first; the learned one only kicks in when config fails. For a failed
+   Reason *option*, your **last** click before Resume is learned (you have to reopen the
+   dropdown first); for everything else it is your **first** click.
+2. **Toast → Reason mapping.** Failure toasts the config doesn't recognize are collected
+   and shown on the options page with a Reason picker. Mappings you approve are applied
+   like built-in ones from then on. Nothing is auto-applied without your approval.
+3. **Ring-timeout tuning.** The seconds-to-answer of every connected call is recorded;
+   once there are 20+ samples the session-end log and the options page suggest a tuned
+   `RING_TIMEOUT_MS` (95th percentile + 4 s buffer). You apply it yourself in options.
+
+Learning hard limits: capture refuses any element whose label looks like Send/submit;
+learning only extends the fixed actions the engine already performs — it can never add
+new actions, set RSVP/warmth/chips, automate the voicemail-vs-live judgment, or touch
+WhatsApp/Gmail (those stay config-only by design). The call button itself is also
+excluded — its labels drive the whole state machine, so a relabel there is a deliberate
+one-line config.js edit.
+
 ## Behaviour notes
 
 - Softphone state/timer are read only inside the softphone panel (found by climbing up

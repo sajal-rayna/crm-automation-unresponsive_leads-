@@ -14,7 +14,8 @@
 
 (() => {
   const C = globalThis.RAYNA;
-  if (!C) return;
+  const L = globalThis.RAYNA_LEARN;
+  if (!C || !L) return;
 
   // ---------------------------------------------------------------------------
   // Session state
@@ -37,6 +38,8 @@
     frozen: false,
     freezeReason: null,   // 'live' | 'prestage' | 'error'
     errorMessage: null,
+    learned: null,        // cached RAYNA_LEARN data (refreshed on storage change)
+    unmappedSeen: new Set(), // unrecognized toast texts already logged this session
   };
 
   function newTally() {
@@ -51,10 +54,12 @@
   let statusTicker = null;    // interval that keeps the panel timer moving
 
   class ActionError extends Error {
-    constructor(intended, cause) {
+    constructor(intended, cause, learnKey) {
       super(intended);
       this.intended = intended;
       this.cause = cause;
+      // Which learnable action failed (null = not teachable, e.g. state reads)
+      this.learnKey = learnKey || (cause && cause.learnKey) || null;
     }
   }
 
@@ -102,13 +107,72 @@
   }
 
   // Wrap a DOM action so a selector failure pauses the session with the
-  // intended action surfaced, instead of silently continuing.
-  async function act(intended, fn) {
+  // intended action surfaced, instead of silently continuing. learnKey marks
+  // the action as teachable: during the pause, the click the user makes to do
+  // it manually is captured and learned as a fallback selector.
+  async function act(intended, fn, learnKey) {
     try {
       return await fn();
     } catch (e) {
-      throw new ActionError(intended, e);
+      throw new ActionError(intended, e, learnKey);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Self-learning: learned-selector fallbacks + teach-on-pause capture
+  // ---------------------------------------------------------------------------
+  function learningOn() {
+    return S.learned && S.learned.enabled !== false;
+  }
+
+  // Learned fallback for a failed config selector (never replaces a working one).
+  function learnedEl(key) {
+    if (!learningOn()) return null;
+    const list = S.learned.selectors && S.learned.selectors[key];
+    return list && list.length ? L.locate(list) : null;
+  }
+
+  let teach = null; // {key, descs[], handler} while paused on a teachable action
+
+  function startTeach(key) {
+    stopTeachListener();
+    teach = { key, descs: [] };
+    teach.handler = (ev) => {
+      if (!teach) return;
+      const raw = ev.target instanceof Element ? ev.target : null;
+      if (!raw) return;
+      const el = raw.closest(
+        'button, [role="button"], [role="option"], [role="radio"], [role="menuitem"], li, label') || raw;
+      // HARD SAFETY RULE: never learn anything that looks like Send/submit.
+      const label = `${el.getAttribute('aria-label') || ''} ${textOf(el)}`.trim();
+      if (C.FORBIDDEN_CLICK_RE.test(label)) return;
+      // Descriptors are built at click time — dropdown options leave the DOM.
+      teach.descs.push(L.describeElement(el));
+      if (teach.descs.length > 10) teach.descs.shift();
+      pushLog('info', `Learning candidate for "${key}": "${(textOf(el) || el.tagName).slice(0, 40)}"`);
+    };
+    document.addEventListener('click', teach.handler, true);
+  }
+
+  function stopTeachListener() {
+    if (teach && teach.handler) {
+      document.removeEventListener('click', teach.handler, true);
+    }
+  }
+
+  async function finishTeach(save) {
+    if (!teach) return;
+    stopTeachListener();
+    const { key, descs } = teach;
+    teach = null;
+    if (!save || !descs.length || !learningOn()) return;
+    // Dropdown options: the LAST click before Resume is the option itself
+    // (earlier clicks reopened the dropdown). Everything else: the first click.
+    const desc = key.startsWith('reason-option:') ? descs[descs.length - 1] : descs[0];
+    await L.recordSelector(key, desc);
+    S.learned = await L.load();
+    pushLog('ok',
+      `Learned "${key}" -> "${(desc.text || desc.aria || desc.css).slice(0, 50)}" (used as fallback from now on)`);
   }
 
   // ---------------------------------------------------------------------------
@@ -261,13 +325,14 @@
     return { state: 'unknown', timer: null };
   }
 
-  // All visible toast texts matching `re` (used for both failure + confirm toasts).
-  function visibleToasts(re) {
+  // All visible toast texts matching `matcher` (a regex or a predicate).
+  function visibleToasts(matcher) {
+    const test = typeof matcher === 'function' ? matcher : (t) => matcher.test(t);
     const out = [];
     for (const el of document.querySelectorAll(C.CRM.TOAST_SELECTOR)) {
       if (!isVisible(el)) continue;
       const t = textOf(el);
-      if (t && re.test(t)) out.push(t);
+      if (t && test(t)) out.push(t);
     }
     return out;
   }
@@ -276,11 +341,9 @@
     for (const m of C.TOAST_REASON_MAP) {
       if (m.re.test(text)) return { reason: m.reason, text };
     }
-    return null;
+    // User-approved learned mappings (options page) apply like built-in ones.
+    return L.matchLearnedToast(S.learned, text);
   }
-
-  const ANY_FAILURE_RE = new RegExp(
-    C.TOAST_REASON_MAP.map((m) => m.re.source).join('|'), 'i');
 
   // Detects toasts that appeared AFTER the detector was created. Texts already
   // on screen (stale, from the previous lead) are ignored — but forgiven once
@@ -295,11 +358,23 @@
   }
 
   function makeToastWatcher() {
-    const fresh = makeFreshToastDetector(ANY_FAILURE_RE);
+    const fresh = makeFreshToastDetector((t) => !!matchFailureToast(t));
     return () => {
       const t = fresh();
       return t ? matchFailureToast(t) : null;
     };
+  }
+
+  // Collect fresh toasts we DON'T recognize so the user can map them to a
+  // Reason on the options page (learning mechanism 2). Logged once per text.
+  function collectUnmappedToast(text) {
+    if (!learningOn() || !text || text.length > 120) return;
+    if (matchFailureToast(text) || C.CRM.SAVE_CONFIRM_RE.test(text)) return;
+    if (S.unmappedSeen.has(text)) return;
+    S.unmappedSeen.add(text);
+    L.recordUnmappedToast(text).catch(() => {});
+    pushLog('warn',
+      `Unrecognized toast during call: "${text.slice(0, 60)}" — map it to a Reason on the options page`);
   }
 
   // ---------------------------------------------------------------------------
@@ -418,10 +493,12 @@
     // Baseline the toasts already on screen so a leftover from the PREVIOUS
     // lead can never be attributed to this call.
     const freshFailureToast = makeToastWatcher();
+    const freshAnyToast = makeFreshToastDetector(() => true);
     setPhase('ringing');
     while (true) {
       const toast = freshFailureToast();
       if (toast) return { kind: 'toast', reason: toast.reason, text: toast.text };
+      collectUnmappedToast(freshAnyToast());
 
       const cs = readCallState();
       if (cs.state === 'connected') return { kind: 'connected' };
@@ -463,10 +540,11 @@
 
     // 1. Ensure the "Did you connect?" toggle is on Not Connected.
     await act('set the "Did you connect?" toggle to Not Connected', async () => {
-      const el = await waitFor(() => findByExactText(C.CRM.NOT_CONNECTED_TEXT), 4000);
+      const el = await waitFor(
+        () => findByExactText(C.CRM.NOT_CONNECTED_TEXT) || learnedEl('not-connected'), 4000);
       if (!el) throw new Error('"Not Connected" option not found');
       if (!looksSelected(el)) clickable(el).click();
-    });
+    }, 'not-connected');
 
     // 2. Reason dropdown.
     // *** BRITTLE #1: this is a custom React dropdown whose options only render
@@ -474,14 +552,22 @@
     // options to appear, then click the option whose text EXACTLY equals the
     // target reason. If the CRM relabels anything, fix it in config.js. ***
     await act(`select Reason "${reason}"`, async () => {
-      const trigger = await waitFor(() => findByExactText(C.CRM.REASON_TRIGGER_TEXT), 4000);
-      if (!trigger) throw new Error('Reason dropdown trigger ("Select reason...") not found');
+      const trigger = await waitFor(
+        () => findByExactText(C.CRM.REASON_TRIGGER_TEXT) || learnedEl('reason-trigger'), 4000);
+      if (!trigger) {
+        const err = new Error('Reason dropdown trigger ("Select reason...") not found');
+        err.learnKey = 'reason-trigger';
+        throw err;
+      }
       clickable(trigger).click();
       const exactRe = new RegExp(`^${escapeRe(reason)}$`, 'i');
-      const option = await waitFor(() => findOption(exactRe), 4000, 100);
+      const option = await waitFor(
+        () => findOption(exactRe) || learnedEl(`reason-option:${reason}`), 4000, 100);
       if (!option) {
         document.body.click(); // close the dropdown so we do not leave it hanging
-        throw new Error(`Reason option "${reason}" did not render`);
+        const err = new Error(`Reason option "${reason}" did not render`);
+        err.learnKey = `reason-option:${reason}`;
+        throw err;
       }
       option.click();
     });
@@ -492,10 +578,11 @@
     // forgive-on-disappear logic means an identical new toast still counts.
     const freshConfirm = makeFreshToastDetector(C.CRM.SAVE_CONFIRM_RE);
     await act('click "Save Outcome"', async () => {
-      const btn = await waitFor(() => findButton(C.CRM.SAVE_OUTCOME_TEXT), 4000);
+      const btn = await waitFor(
+        () => findButton(C.CRM.SAVE_OUTCOME_TEXT) || learnedEl('save-outcome'), 4000);
       if (!btn) throw new Error('Save Outcome button not found');
       btn.click();
-    });
+    }, 'save-outcome');
 
     // 4. Wait for a FRESH save confirmation (spec: "Save Outcome -> wait for
     // confirm"). Without one we pause rather than risk silently unlogged leads;
@@ -547,10 +634,11 @@
     setPhase('advancing');
     const before = leadFingerprint();
     await act('click "Next" to advance to the next lead', async () => {
-      const btn = await waitFor(() => findButton(C.CRM.NEXT_BUTTON_TEXT), 4000);
+      const btn = await waitFor(
+        () => findButton(C.CRM.NEXT_BUTTON_TEXT) || learnedEl('next'), 4000);
       if (!btn) throw new Error('Next button not found');
       btn.click();
-    });
+    }, 'next');
     const changed = await waitFor(
       () => leadFingerprint() !== before, C.CRM.ADVANCE_TIMEOUT_MS, 400);
     if (!changed) {
@@ -633,6 +721,10 @@
 
     if (outcome.kind === 'connected') {
       S.connectedAt = Date.now();
+      // Learning mechanism 3: remember how long answered calls actually rang.
+      if (learningOn()) {
+        L.recordRingSec(Math.round((S.connectedAt - S.callStartedAt) / 1000)).catch(() => {});
+      }
       startTicker();
       setPhase('connected', 'Voicemail / Live / Pre-stage / Skip?');
       pushLog('info', 'CONNECTED — listen: Voicemail, Live, Pre-stage or Skip?');
@@ -711,6 +803,8 @@
     S.stopRequested = false;
     S.dialedCount = 0;
     S.tally = newTally();
+    S.unmappedSeen = new Set();
+    S.learned = await L.load();
     pushLog('info', 'Session started');
 
     while (S.running && !S.stopRequested) {
@@ -730,11 +824,17 @@
           // Resume redials whatever lead is on screen, so the instructions must
           // say to finish this lead (incl. Next) first — otherwise a lead whose
           // outcome was already saved would be dialed and logged twice.
+          const teachable = !!(e.learnKey && learningOn());
+          if (teachable) startTeach(e.learnKey);
           await freeze('error',
             `Selector failed — intended action: ${e.intended}. ` +
             'Finish this lead by hand (do the action, make sure the outcome is ' +
             'saved, and click Next if this lead is done), then press Resume — ' +
-            'dialing continues from the lead on screen.');
+            'dialing continues from the lead on screen.' +
+            (teachable
+              ? ' TEACH IT: the click you make to perform this action will be learned as a fallback.'
+              : ''));
+          await finishTeach(teachable);
         } else {
           S.tally.errors += 1;
           await freeze('error', `Unexpected error: ${e && e.message}. Press Resume to continue.`);
@@ -751,6 +851,10 @@
       `Session ended — dialed ${t.dialed}: ${t.noAnswer} no-answer, ${t.voicemail} voicemail, ` +
       `${t.busy} busy, ${t.dropped} dropped, ${t.techFailure} tech-failure, ${t.invalid} invalid, ` +
       `${t.live} live, ${t.prestaged} pre-staged, ${t.skipped} skipped, ${t.errors} errors`);
+    if (learningOn()) {
+      const tip = L.ringTimeoutTip(S.learned, S.settings.RING_TIMEOUT_MS);
+      if (tip) pushLog('info', tip);
+    }
   }
 
   function requestStop() {
@@ -812,9 +916,20 @@
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  // Keep the learned-data cache current with options-page edits (approvals,
+  // forgets, the enable toggle) without needing a page reload.
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes[L.STORAGE_KEY]) {
+        S.learned = L.normalize(changes[L.STORAGE_KEY].newValue);
+      }
+    });
+  } catch (e) { /* context gone */ }
+
   // Announce ourselves so an already-open panel picks up the current state.
   ;(async () => {
     S.settings = await C.getSettings();
+    S.learned = await L.load();
     S.lead = extractLead();
     pushStatus();
   })();

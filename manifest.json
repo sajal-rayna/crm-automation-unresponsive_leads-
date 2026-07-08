@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Rayna Auto-Dialer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Automates the repetitive parts of the Rayna CRM outbound-calling workflow. Personal load-unpacked tool: never logs in, never sends messages or emails.",
   "minimum_chrome_version": "114",
   "permissions": ["scripting", "storage", "sidePanel", "tabs"],
@@ -23,7 +23,7 @@
   "content_scripts": [
     {
       "matches": ["https://crm.rayna-properties.com/*"],
-      "js": ["config.js", "content-crm.js"],
+      "js": ["config.js", "learning.js", "content-crm.js"],
       "run_at": "document_idle"
     },
     {
