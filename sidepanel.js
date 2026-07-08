@@ -16,7 +16,7 @@
     prestage: $('btn-prestage'), skip: $('btn-skip'),
     freezeBox: $('freeze-box'), freezeMsg: $('freeze-msg'),
     callScript: $('call-script'), resume: $('btn-resume'),
-    log: $('log'),
+    log: $('log'), listenLine: $('listen-line'),
   };
 
   const PHASE_STYLE = {
@@ -76,6 +76,17 @@
       (st.phase === 'connected' || st.phase === 'ringing' || st.phase === 'dialing')
         ? fmtMs(st.callElapsedMs) : '';
     els.phaseDetail.textContent = st.phaseDetail || '';
+
+    const li = st.listen;
+    if (li && (li.active || li.suggestion)) {
+      const lastCue = (li.cues || [])[li.cues.length - 1];
+      els.listenLine.style.display = 'block';
+      els.listenLine.textContent = li.suggestion
+        ? `🎙 Sounds like: ${li.suggestion}${lastCue ? ` (at ${lastCue.at})` : ''} — your call`
+        : '🎙 listening to your mic…';
+    } else {
+      els.listenLine.style.display = 'none';
+    }
 
     els.start.disabled = st.running;
     els.stop.disabled = !st.running;

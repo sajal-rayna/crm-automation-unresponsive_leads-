@@ -19,6 +19,18 @@ globalThis.RAYNA = (() => {
     WHATSAPP_MODE: 'existing_tab', // 'existing_tab' | 'wa_link'
     GMAIL_DRAFT_SUBJECT:
       "RSVP Confirmed: First time ever meet the TOP Developers of Dubai Virtually",
+
+    // --- Call listening (beta, opt-in). Listens to YOUR microphone side of a
+    // connected call, matches CALL_CUES against what you say, and shows outcome
+    // SUGGESTIONS with timestamps. It never hears the lead's audio and never
+    // acts on its own. ---
+    LISTEN_ENABLED: false,
+    LISTEN_MODE: 'webspeech',      // 'webspeech' (built-in, may use the browser
+                                   // vendor's servers) | 'local_server' (POST
+                                   // audio chunks to a local Whisper endpoint —
+                                   // Voicebox / OmniVoice Studio / whisper.cpp)
+    LISTEN_STT_URL: 'http://127.0.0.1:8788/v1/audio/transcriptions',
+    LISTEN_LANG: 'en-US',
   };
 
   // ---------------------------------------------------------------------------
@@ -249,6 +261,35 @@ globalThis.RAYNA = (() => {
   }
 
   // ---------------------------------------------------------------------------
+  // Call-listening cues — matched against what YOU say on a connected call.
+  // Deliberately distinctive phrases only: generic politeness ("have a great
+  // day") appears in BOTH the decline wrap-up and the RSVP close script, so it
+  // must not be a cue. Edit/extend freely; tags feed the learning stats.
+  // ---------------------------------------------------------------------------
+  const CALL_CUES = [
+    {
+      tag: 'interested_rsvp',
+      label: 'Qualified — RSVP / next steps',
+      re: /confirm (your )?(participation|registration|spot)|calendar invite|preferred developer|(11|eleven)\s*a\.?m\.? central|webinar link|send(ing)? you the invite|see you on the (webinar|25th)/i,
+    },
+    {
+      tag: 'not_interested',
+      label: 'Not interested / not qualified',
+      re: /not interested|no longer interested|remove (me|my|your) number|don'?t call|do not call|not looking (to|for)|already (bought|invested|purchased)|won'?t be able to (join|attend|make)|can'?t make it|not the right fit/i,
+    },
+    {
+      tag: 'voicemail_left',
+      label: 'Leaving a voicemail',
+      re: /leav(e|ing) (you )?a (quick |voice|short )?message|after the (beep|tone)|i'?ll try (you )?again|call(ing)? you back later/i,
+    },
+    {
+      tag: 'callback',
+      label: 'Callback requested',
+      re: /better time to (talk|call|connect)|call (you )?back (later |tomorrow |today )?(at|around|when)?|when (would|is) a (good|better) time/i,
+    },
+  ];
+
+  // ---------------------------------------------------------------------------
   // Message types used between panel <-> background <-> content scripts
   // ---------------------------------------------------------------------------
   const MSG = {
@@ -258,6 +299,7 @@ globalThis.RAYNA = (() => {
     PRESTAGE: 'RAYNA_PRESTAGE',         // CRM content script -> background (orchestrate)
     WA_FILL: 'RAYNA_WA_FILL',           // background -> WhatsApp content script
     GMAIL_PRESTAGE: 'RAYNA_GMAIL_PRESTAGE', // background -> Gmail content script
+    STT_TRANSCRIBE: 'RAYNA_STT_TRANSCRIBE', // CRM -> background (local Whisper POST)
   };
 
   // Panel/hotkey commands understood by the CRM engine
@@ -290,6 +332,7 @@ globalThis.RAYNA = (() => {
     CRM,
     WA,
     GMAIL,
+    CALL_CUES,
     FORBIDDEN_CLICK_RE,
     TEMPLATES,
     fillTemplate,

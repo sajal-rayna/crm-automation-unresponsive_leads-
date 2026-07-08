@@ -40,6 +40,7 @@
     errorMessage: null,
     learned: null,        // cached RAYNA_LEARN data (refreshed on storage change)
     unmappedSeen: new Set(), // unrecognized toast texts already logged this session
+    listen: { active: false, suggestion: null, cues: [], unavailable: false },
   };
 
   function newTally() {
@@ -394,6 +395,11 @@
       callElapsedMs: S.connectedAt ? Date.now() - S.connectedAt
         : S.callStartedAt ? Date.now() - S.callStartedAt : 0,
       callScript: C.TEMPLATES.CALL_SCRIPT,
+      listen: {
+        active: S.listen.active,
+        suggestion: S.listen.suggestion,
+        cues: S.listen.cues.slice(-5),
+      },
       logs: S.logs.slice(-60),
       settings: S.settings,
     };
@@ -647,6 +653,133 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Call listening (beta, opt-in) — hears YOUR microphone side only, matches
+  // CALL_CUES against what you say, and SUGGESTS an outcome with timestamps.
+  // It never captures the lead's audio and never acts on a suggestion.
+  // ---------------------------------------------------------------------------
+  let listener = null; // {mode, stop()} while active
+
+  function listenElapsed() {
+    const base = S.connectedAt || S.callStartedAt || Date.now();
+    const s = Math.max(0, Math.floor((Date.now() - base) / 1000));
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function handleUtterance(text) {
+    if (!text || !S.listen.active) return;
+    for (const cue of C.CALL_CUES) {
+      if (!cue.re.test(text)) continue;
+      const at = listenElapsed();
+      S.listen.suggestion = cue.label;
+      S.listen.cues.push({ at, tag: cue.tag, label: cue.label });
+      if (S.listen.cues.length > 8) S.listen.cues.shift();
+      pushLog('info', `🎙 ${at} heard a "${cue.label}" cue in what you said`);
+      pushStatus();
+      return; // first matching cue wins for this utterance
+    }
+  }
+
+  async function startListening() {
+    if (listener || !S.settings.LISTEN_ENABLED) return;
+    S.listen = { active: true, suggestion: null, cues: [], unavailable: false };
+    try {
+      listener = S.settings.LISTEN_MODE === 'local_server'
+        ? await startLocalServerListener()
+        : startWebSpeechListener();
+      pushLog('info', `🎙 Listening to your mic (${S.settings.LISTEN_MODE}) — suggestions only, nothing is stored`);
+    } catch (e) {
+      listener = null;
+      S.listen = { active: false, suggestion: null, cues: [], unavailable: true };
+      pushLog('warn', `Call listening unavailable: ${String(e && e.message || e)}`);
+    }
+    pushStatus();
+  }
+
+  function stopListening() {
+    if (!listener) return;
+    try { listener.stop(); } catch (e) { /* already dead */ }
+    listener = null;
+    S.listen.active = false;
+    pushStatus();
+  }
+
+  // Mode 1: Chrome's built-in Web Speech API. Zero install; depending on the
+  // browser/platform the audio may be processed by the browser vendor's
+  // servers (documented on the options page).
+  function startWebSpeechListener() {
+    const SR = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
+    if (!SR) throw new Error('SpeechRecognition not supported in this browser');
+    let stopped = false;
+    const rec = new SR();
+    rec.lang = S.settings.LISTEN_LANG;
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (ev) => {
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) handleUtterance(ev.results[i][0].transcript);
+      }
+    };
+    rec.onerror = (ev) => {
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+        stopped = true;
+        S.listen.unavailable = true;
+        pushLog('warn', 'Microphone access denied — call listening off for this session');
+      }
+    };
+    rec.onend = () => { if (!stopped && S.listen.active) { try { rec.start(); } catch (e) { /* busy */ } } };
+    rec.start();
+    return { mode: 'webspeech', stop: () => { stopped = true; try { rec.stop(); } catch (e) {} } };
+  }
+
+  // Mode 2: record 5s mic chunks and have the background worker POST them to a
+  // LOCAL Whisper-compatible endpoint (Voicebox / OmniVoice Studio /
+  // whisper.cpp server) — audio never leaves your machine.
+  async function startLocalServerListener() {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    recorder.ondataavailable = async (ev) => {
+      if (!S.listen.active || !ev.data || ev.data.size < 2000) return;
+      try {
+        const buf = await ev.data.arrayBuffer();
+        let bin = '';
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < bytes.length; i += 0x8000) {
+          bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        }
+        const res = await chrome.runtime.sendMessage({
+          type: C.MSG.STT_TRANSCRIBE,
+          b64: btoa(bin),
+          mime: ev.data.type || 'audio/webm',
+          url: S.settings.LISTEN_STT_URL,
+        });
+        if (res && res.ok) handleUtterance(res.text || '');
+        else if (res && res.error && !S.listen.unavailable) {
+          S.listen.unavailable = true;
+          pushLog('warn', `Local STT server error: ${res.error} — is Voicebox/whisper running at ${S.settings.LISTEN_STT_URL}?`);
+        }
+      } catch (e) { /* extension context gone */ }
+    };
+    recorder.start(5000); // one chunk every 5s
+    return {
+      mode: 'local_server',
+      stop: () => {
+        try { recorder.stop(); } catch (e) {}
+        for (const t of stream.getTracks()) t.stop();
+      },
+    };
+  }
+
+  // Learning: associate the cues heard with the decision you then made, so the
+  // options page can show which of your phrases predict which outcome and how
+  // early in the call your decisions typically happen.
+  function recordListenOutcome(decision) {
+    if (!S.settings.LISTEN_ENABLED || !learningOn()) return;
+    const callSec = S.connectedAt ? Math.round((Date.now() - S.connectedAt) / 1000) : 0;
+    const tags = [...new Set(S.listen.cues.map((c) => c.tag))];
+    L.recordCueOutcome({ tags, decision, callSec }).catch(() => {});
+  }
+
+  // ---------------------------------------------------------------------------
   // Pre-staging (via the background worker; NOTHING here ever sends)
   // ---------------------------------------------------------------------------
   async function doPrestage(lead) {
@@ -725,6 +858,7 @@
       if (learningOn()) {
         L.recordRingSec(Math.round((S.connectedAt - S.callStartedAt) / 1000)).catch(() => {});
       }
+      await startListening(); // no-op unless LISTEN_ENABLED
       startTicker();
       setPhase('connected', 'Voicemail / Live / Pre-stage / Skip?');
       pushLog('info', 'CONNECTED — listen: Voicemail, Live, Pre-stage or Skip?');
@@ -734,8 +868,10 @@
       } finally {
         stopTicker();
       }
+      recordListenOutcome(decision);
 
       if (decision === 'voicemail') {
+        stopListening();
         await endCall();
         prestageMissWhatsApp(lead);
         await logOutcome(C.REASONS.VOICEMAIL);
@@ -745,14 +881,20 @@
         S.tally.live += 1;
         // Freeze with the call still up — the human runs the interested branch
         // (warmth, RSVP, sends, calendar, Save Outcome, Next) entirely by hand.
+        // Keep listening through the freeze: the RSVP phrases happen here.
         await freeze('live',
           'LIVE call — handle it manually. When done (Save Outcome + Next), press Resume.');
+        recordListenOutcome('live_resumed');
+        stopListening();
       } else if (decision === 'prestage') {
         await doPrestage(lead);
         S.tally.prestaged += 1;
         await freeze('prestage',
           'Drafts staged (nothing sent). Finish the lead manually (Save Outcome + Next), then press Resume.');
+        recordListenOutcome('prestage_resumed');
+        stopListening();
       } else { // skip
+        stopListening();
         await endCall();
         S.tally.skipped += 1;
         pushLog('info', 'Skipped (no outcome logged)');
@@ -817,6 +959,7 @@
         await runLead();
       } catch (e) {
         stopTicker();
+        stopListening();
         if (e instanceof ActionError) {
           S.tally.errors += 1;
           // Safety rule: never continue past a failed selector — pause and
@@ -845,6 +988,7 @@
     S.running = false;
     S.stopRequested = false;
     stopTicker();
+    stopListening();
     setPhase('idle');
     const t = S.tally;
     pushLog('info',

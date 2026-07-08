@@ -143,6 +143,30 @@
       td(row, smallButton('Forget', async () => { await L.forgetToastMapping(m.pattern); renderLearning(); }), '90px');
       mapTable.appendChild(row);
     }
+
+    // Call-listening stats: cue -> decision counts, then decision timing medians
+    const cueTable = $('cue-stats');
+    cueTable.innerHTML = '';
+    const decisions = Object.keys(data.decisionSecs || {});
+    const hasCueData = (data.cueStats || []).length || decisions.length;
+    $('no-cues').style.display = hasCueData ? 'none' : 'block';
+    for (const s of (data.cueStats || []).slice().sort((a, b) => b.count - a.count)) {
+      const row = document.createElement('tr');
+      td(row, s.tag);
+      td(row, `→ ${s.decision}`, '190px');
+      td(row, `${s.count}x`, '70px');
+      cueTable.appendChild(row);
+    }
+    for (const dec of decisions) {
+      const secs = (data.decisionSecs[dec] || []).slice().sort((a, b) => a - b);
+      if (!secs.length) continue;
+      const median = secs[Math.floor(secs.length / 2)];
+      const row = document.createElement('tr');
+      td(row, `typical time to "${dec}"`);
+      td(row, `~${Math.floor(median / 60)}m ${median % 60}s into the call`, '190px');
+      td(row, `${secs.length} calls`, '70px');
+      cueTable.appendChild(row);
+    }
   }
 
   $('learn-enabled').addEventListener('change', async (e) => {

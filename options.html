@@ -77,6 +77,37 @@
     <b>config.js</b> inside the extension folder.
   </div>
 
+  <h2 style="margin-top:32px">Call listening (beta)</h2>
+  <label class="check">
+    <input type="checkbox" id="LISTEN_ENABLED" />
+    Listen to MY side of connected calls and suggest the outcome
+  </label>
+  <div class="help">
+    Hears your microphone only — never the lead's audio. Matches distinctive phrases you
+    say (RSVP close, decline wrap-up, voicemail message) and shows a suggestion with a
+    timestamp in the side panel. It never logs, hangs up, or advances on its own.
+    <b>webspeech</b> mode uses the browser's recognizer (audio may be processed by the
+    browser vendor); <b>local_server</b> mode sends 5-second chunks to a Whisper server
+    on <i>this machine only</i> (Voicebox, OmniVoice Studio, or whisper.cpp — the
+    extension refuses any non-localhost URL). Cue phrases live in config.js CALL_CUES.
+  </div>
+
+  <label>Speech engine
+    <select id="LISTEN_MODE">
+      <option value="webspeech">webspeech (built-in, zero install)</option>
+      <option value="local_server">local_server (local Whisper — fully private)</option>
+    </select>
+  </label>
+
+  <label>Local STT endpoint (local_server mode)
+    <div class="help">An OpenAI-compatible or whisper.cpp transcription endpoint on localhost.</div>
+    <input type="text" id="LISTEN_STT_URL" />
+  </label>
+
+  <label>Speech language
+    <input type="text" id="LISTEN_LANG" />
+  </label>
+
   <h2 style="margin-top:32px">Self-learning</h2>
   <label class="check">
     <input type="checkbox" id="learn-enabled" />
@@ -105,6 +136,12 @@
   <h3>Approved toast &rarr; Reason mappings</h3>
   <table id="toast-map" style="width:100%; border-collapse:collapse; margin-top:8px"></table>
   <div class="help" id="no-mappings">No approved mappings yet.</div>
+
+  <h3>Call-listening stats</h3>
+  <div class="help">Which cues in what you say lead to which decision, and how far into a
+    call your decisions typically happen.</div>
+  <table id="cue-stats" style="width:100%; border-collapse:collapse; margin-top:8px"></table>
+  <div class="help" id="no-cues">No call-listening data yet.</div>
 
   <div class="row">
     <button id="forget-all">Forget all learned data</button>

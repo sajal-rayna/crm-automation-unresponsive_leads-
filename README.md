@@ -125,6 +125,38 @@ WhatsApp/Gmail (those stay config-only by design). The call button itself is als
 excluded — its labels drive the whole state machine, so a relabel there is a deliberate
 one-line config.js edit.
 
+## Call listening (beta, opt-in)
+
+Turn on *"Listen to MY side of connected calls"* in options and, once a call connects,
+the tool transcribes **your microphone side only** and matches distinctive phrases you
+say against `CALL_CUES` in config.js — the RSVP close ("confirm your registration",
+"calendar invite", "preferred developer"), decline wrap-ups ("not interested", "remove
+my number"), voicemail messages ("leaving you a quick message"), and callback requests.
+When a cue fires, the side panel shows *"🎙 Sounds like: Qualified — RSVP / next steps
+(at 01:42) — your call"* and the moment is timestamped in the log. Over time the
+learning layer reports which of your phrases predict which decision and how far into a
+call your decisions typically happen (options page → Call-listening stats).
+
+Two speech engines:
+
+- **webspeech** (default, zero install): the browser's built-in recognizer. Depending on
+  platform, Chrome may process this audio on the vendor's servers.
+- **local_server** (fully private): 5-second mic chunks are POSTed to a Whisper server
+  running **on this machine** — the background worker refuses any non-localhost URL, so
+  call audio can never leave your computer. Compatible endpoints include
+  [Voicebox](https://github.com/jamiepine/voicebox) (MIT) and
+  [OmniVoice Studio](https://github.com/debpalash/OmniVoice-Studio) (AGPL-3.0) — both are
+  desktop apps with local Whisper STT and a FastAPI backend — or a plain
+  [whisper.cpp](https://github.com/ggml-org/whisper.cpp) `server`. Point
+  `LISTEN_STT_URL` at the endpoint (OpenAI-style `/v1/audio/transcriptions` or
+  whisper.cpp `/inference`; the response just needs a `text` field).
+
+Hard limits: it never captures the lead's audio (capturing the remote party is call
+*recording* and subject to consent laws — that belongs server-side via Twilio AMD/Media
+Streams, Section 6 of the handoff doc, with proper consent handling); suggestions never
+trigger actions — voicemail/live/RSVP decisions stay yours; nothing is stored except
+cue tags, decisions, and timings (no transcripts, no audio).
+
 ## Behaviour notes
 
 - Softphone state/timer are read only inside the softphone panel (found by climbing up

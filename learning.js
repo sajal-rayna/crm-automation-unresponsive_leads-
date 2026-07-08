@@ -27,6 +27,8 @@ globalThis.RAYNA_LEARN = (() => {
     toastSeen: [],   // [{text, count, lastAt}] unrecognized, awaiting mapping
     toastMap: [],    // [{pattern, reason, learnedAt}] approved by the user
     ringSecs: [],    // seconds-to-answer of connected calls (max 300)
+    cueStats: [],    // [{tag, decision, count}] call-listening cue -> your decision
+    decisionSecs: {}, // decision -> [seconds into the call it was made] (max 100)
   };
 
   function normalize(raw) {
@@ -196,6 +198,21 @@ globalThis.RAYNA_LEARN = (() => {
     return mutate((d) => { d.toastSeen = d.toastSeen.filter((t) => t.text !== text); });
   }
 
+  // Call-listening learning: which cues you said predict which decision, and
+  // how far into the call your decisions typically happen.
+  function recordCueOutcome({ tags, decision, callSec }) {
+    return mutate((d) => {
+      for (const tag of (tags && tags.length ? tags : ['(no cue heard)'])) {
+        const hit = d.cueStats.find((x) => x.tag === tag && x.decision === decision);
+        if (hit) hit.count += 1;
+        else d.cueStats.push({ tag, decision, count: 1 });
+      }
+      const arr = d.decisionSecs[decision] = d.decisionSecs[decision] || [];
+      arr.push(callSec);
+      if (arr.length > 100) arr.splice(0, arr.length - 100);
+    });
+  }
+
   function setEnabled(enabled) {
     return mutate((d) => { d.enabled = !!enabled; });
   }
@@ -232,6 +249,7 @@ globalThis.RAYNA_LEARN = (() => {
     recordSelector,
     forgetSelector,
     recordRingSec,
+    recordCueOutcome,
     recordUnmappedToast,
     approveToastMapping,
     forgetToastMapping,

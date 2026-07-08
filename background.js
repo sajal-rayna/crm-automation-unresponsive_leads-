@@ -150,6 +150,37 @@ async function handlePrestage(msg) {
 }
 
 // ---------------------------------------------------------------------------
+// Call-listening STT relay: POST a mic chunk to a LOCAL Whisper-compatible
+// server (Voicebox / OmniVoice Studio / whisper.cpp). Locked to localhost so
+// call audio can never be routed off this machine, whatever the settings say.
+// ---------------------------------------------------------------------------
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+async function handleTranscribe(msg) {
+  let host;
+  try { host = new URL(msg.url).hostname; } catch (e) { return { ok: false, error: 'bad STT URL' }; }
+  if (!LOCAL_HOSTS.has(host)) {
+    return { ok: false, error: 'STT URL must be localhost — audio is never sent off this machine' };
+  }
+  const bin = atob(msg.b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type: msg.mime || 'audio/webm' }), 'chunk.webm');
+  form.append('model', 'whisper-1'); // OpenAI-compatible servers expect it; others ignore it
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const resp = await fetch(msg.url, { method: 'POST', body: form, signal: ctrl.signal });
+    if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
+    const data = await resp.json();
+    return { ok: true, text: data.text || data.transcription || '' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Message routing
 // ---------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -167,6 +198,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         wa: { ok: false, detail: String(e) },
         gmail: { ok: false, detail: String(e) },
       }));
+    return true; // async response
+  }
+
+  if (msg.type === C.MSG.STT_TRANSCRIBE) {
+    handleTranscribe(msg).then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
     return true; // async response
   }
 
