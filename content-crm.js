@@ -260,6 +260,27 @@
     return `${l.name}|${l.counter}`;
   }
 
+  // The Raw Source Data card (holding the CampaignTag JSON) is collapsed by
+  // default. At dial time, expand it once so the campaign shows on the panel
+  // by the time a call connects. Only ever clicks a toggle that currently
+  // reads "Show"/"View"/"Expand" inside that card — nothing else.
+  async function ensureCampaignVisible() {
+    if (C.CRM.CAMPAIGN_TAG_RE.test(document.body.innerText || '')) return;
+    for (const el of document.querySelectorAll('button, [role="button"], a, span')) {
+      if (el.childElementCount > 1) continue;
+      if (!C.CRM.RAW_SOURCE_TOGGLE_RE.test(textOf(el)) || !isVisible(el)) continue;
+      let node = el.parentElement;
+      for (let i = 0; node && node !== document.body && i < 6; i++) {
+        if (C.CRM.RAW_SOURCE_RE.test(node.innerText || '')) {
+          el.click();
+          await sleep(600); // let the JSON render
+          return;
+        }
+        node = node.parentElement;
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Softphone state reading (state text + timer ONLY — never the toggle)
   //
@@ -868,6 +889,7 @@
     setPhase('reading');
     S.callStartedAt = null;
     S.connectedAt = null;
+    await ensureCampaignVisible();
     const lead = extractLead();
     S.lead = lead;
     if (!lead.name && !lead.phone) {

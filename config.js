@@ -87,6 +87,10 @@ globalThis.RAYNA = (() => {
 
     // CampaignTag out of the Raw Source Data JSON text
     CAMPAIGN_TAG_RE: /CampaignTag"?\s*[:=]\s*"([^"]+)"/,
+    // The Raw Source Data card is collapsed by default — the engine clicks its
+    // "Show" toggle once per lead (at dial time) so the CampaignTag is readable.
+    RAW_SOURCE_RE: /Raw Source Data/i,
+    RAW_SOURCE_TOGGLE_RE: /^(Show|View|Expand)$/i,
 
     // Lead Information card field labels (exact element text, trimmed; the
     // live CRM renders some with a trailing colon and/or uppercase)
