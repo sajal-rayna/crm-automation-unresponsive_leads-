@@ -55,10 +55,14 @@ async function sendToCrm(cmd) {
 // ---------------------------------------------------------------------------
 // Pre-stage orchestration (never sends; content scripts enforce the same rule)
 // ---------------------------------------------------------------------------
+// NOTE: racing does not cancel the underlying work — the content script may
+// still finish after the deadline, so the timeout message must not claim
+// outright failure.
 const withTimeout = (p, ms, what) =>
   Promise.race([
     p,
-    new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} timed out`)), ms)),
+    new Promise((_, rej) => setTimeout(() => rej(new Error(
+      `${what} timed out — it may still finish; check that tab before staging manually`)), ms)),
   ]);
 
 async function prestageWhatsApp(lead, waText, settings) {
@@ -77,6 +81,8 @@ async function prestageWhatsApp(lead, waText, settings) {
   // existing_tab mode: fill the composer in the already-open WhatsApp Web tab.
   const tab = await findTab(C.WA.TAB_URL_PATTERN);
   if (!tab) return { ok: false, detail: 'WhatsApp Web tab not open — open web.whatsapp.com' };
+  // Budget > worst-case legitimate latency: ~32s per fill (3 waits + sleeps)
+  // plus one queued fill ahead of us (fills are serialized in the tab).
   const res = await withTimeout(
     sendToTab(tab.id, {
       type: C.MSG.WA_FILL,
@@ -84,7 +90,7 @@ async function prestageWhatsApp(lead, waText, settings) {
       text: waText,
       leadName: lead.name || '',
     }),
-    25000, 'WhatsApp pre-stage');
+    75000, 'WhatsApp pre-stage');
   return res || { ok: false, detail: 'no response from WhatsApp tab' };
 }
 
@@ -95,14 +101,16 @@ async function prestageGmail(lead, settings) {
     tab = await chrome.tabs.create({ url: C.GMAIL.URL, active: false });
     await new Promise((r) => setTimeout(r, 4000)); // let Gmail boot
   }
+  // Budget > worst-case legitimate latency: ~32s per pre-stage (2 waits +
+  // sleeps) plus delivery retries while a just-created Gmail tab boots.
   const res = await withTimeout(
     sendToTab(tab.id, {
       type: C.MSG.GMAIL_PRESTAGE,
       email: lead.email,
       firstName: lead.firstName,
       subject: settings.GMAIL_DRAFT_SUBJECT,
-    }),
-    35000, 'Gmail pre-stage');
+    }, { retries: 10, delayMs: 1500 }),
+    90000, 'Gmail pre-stage');
   return res || { ok: false, detail: 'no response from Gmail tab' };
 }
 
