@@ -23,6 +23,7 @@
   const S = {
     running: false,
     stopRequested: false,
+    forceAbort: false,    // second Stop press: abort the in-flight call NOW
     phase: 'idle',        // idle | reading | dialing | ringing | connected |
                           // logging | advancing | prestaging |
                           // frozen_live | frozen_prestage | paused_error
@@ -289,10 +290,14 @@
     return C.findCampaignTag(shadowTextUnder(document.body));
   }
 
+  function rawSourceHeader() {
+    return findByExactText(/^Raw Source Data$/i);
+  }
+
   // The card element that contains the "Raw Source Data" header (stops before
   // swallowing a sibling card like Lead Information).
   function rawSourceCard() {
-    const header = findByExactText(/^Raw Source Data$/i);
+    const header = rawSourceHeader();
     if (!header) return null;
     let card = header;
     let node = header.parentElement;
@@ -302,6 +307,51 @@
       node = node.parentElement;
     }
     return card;
+  }
+
+  // Full pointer-event click. Some component libraries toggle on pointer/mouse
+  // events and ignore a bare synthetic .click().
+  function clickHard(el) {
+    const r = el.getBoundingClientRect();
+    const opts = {
+      bubbles: true, cancelable: true, view: window,
+      clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+    };
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      try {
+        el.dispatchEvent(type.startsWith('pointer')
+          ? new PointerEvent(type, opts) : new MouseEvent(type, opts));
+      } catch (e) { /* PointerEvent unavailable — the mouse events suffice */ }
+    }
+  }
+
+  // The card's Show/View/Expand toggle. The computed card subtree can miss it
+  // (header and actions can live in sibling subtrees), so fall back to a
+  // page-wide search and pick the candidate on the same row as — and nearest
+  // to — the "Raw Source Data" header.
+  function findRawSourceToggle(card, header) {
+    const collect = (scope) => {
+      const out = [];
+      for (const el of scope.querySelectorAll('button, [role="button"], a, span, div')) {
+        if (isVisible(el) && C.CRM.RAW_SOURCE_TOGGLE_RE.test(textOf(el))) out.push(el);
+      }
+      return out;
+    };
+    let candidates = card ? collect(card) : [];
+    if (!candidates.length) candidates = collect(document);
+    if (!candidates.length) return null;
+    if (!header || candidates.length === 1) return candidates[0];
+    const hr = header.getBoundingClientRect();
+    let best = null;
+    let bestScore = Infinity;
+    for (const el of candidates) {
+      const r = el.getBoundingClientRect();
+      // Same horizontal band as the header dominates; distance breaks ties.
+      const score = Math.abs((r.top + r.height / 2) - (hr.top + hr.height / 2)) * 10 +
+        Math.abs(r.left - hr.right);
+      if (score < bestScore) { bestScore = score; best = el; }
+    }
+    return best;
   }
 
   // The Raw Source Data card (holding the CampaignTag string) is collapsed by
@@ -319,10 +369,12 @@
       return;
     }
 
-    // Stage 1: expand (no-op when the toggle already reads "Hide").
-    for (const el of card.querySelectorAll('button, [role="button"], a, span, div')) {
-      if (isVisible(el) && C.CRM.RAW_SOURCE_TOGGLE_RE.test(textOf(el))) { el.click(); break; }
-    }
+    // Stage 1: expand (no-op when the toggle already reads "Hide"). Card-first
+    // lookup with a header-proximity page-wide fallback, clicked with real
+    // pointer events — a bare .click() was not registering on this CRM.
+    const toggle = findRawSourceToggle(card, rawSourceHeader());
+    if (toggle) clickHard(toggle);
+    else pushLog('warn', 'Raw Source Data "Show" toggle not found — trying the other capture stages');
     if (await waitFor(tagPresent, 2000, 200)) return;
 
     // Stage 1.5: lazy/virtualized rows (the SOURCE field sits below the fold
@@ -342,7 +394,7 @@
       const tab = [...card.querySelectorAll('button, [role="tab"], [role="button"], a, div, span')]
         .find((el) => isVisible(el) && el.childElementCount <= 3 && tabRe.test(textOf(el)));
       if (tab) {
-        tab.click();
+        clickHard(tab);
         if (await waitFor(tagPresent, 1500, 200)) return;
       }
     }
@@ -662,6 +714,7 @@
     const freshAnyToast = makeFreshToastDetector(() => true);
     setPhase('ringing');
     while (true) {
+      if (S.forceAbort) return { kind: 'aborted' };
       const toast = freshFailureToast();
       if (toast) return { kind: 'toast', reason: toast.reason, text: toast.text };
       collectUnmappedToast(freshAnyToast());
@@ -1042,6 +1095,17 @@
       stopTicker();
     }
 
+    if (outcome.kind === 'aborted') {
+      // Force-stop: hang up best-effort, log nothing, let the session loop
+      // exit (stopRequested is already set). Never pause on hang-up trouble
+      // here — the operator is actively trying to stop.
+      try { await endCall(); } catch (e) {
+        pushLog('warn', 'Force-stop: could not confirm the hang-up — check the softphone');
+      }
+      pushLog('info', 'Call aborted — no outcome logged; this lead was left as-is');
+      return;
+    }
+
     if (outcome.kind === 'connected') {
       S.connectedAt = Date.now();
       // Learning mechanism 3: remember how long answered calls actually rang.
@@ -1144,6 +1208,7 @@
     if (S.running) return;
     S.running = true;
     S.stopRequested = false;
+    S.forceAbort = false;
     S.dialedCount = 0;
     S.tally = newTally();
     S.unmappedSeen = new Set();
@@ -1204,6 +1269,7 @@
 
   function requestStop() {
     if (!S.running) return;
+    const alreadyRequested = S.stopRequested;
     S.stopRequested = true;
     if (pendingDecision) {
       // Stop must always be able to end the session — don't leave the
@@ -1216,9 +1282,14 @@
       // advancing happens after a freeze, so nothing is skipped.
       pushLog('info', 'Stop requested while frozen — ending the session');
       pendingResume.resolve();
-    } else {
-      pushLog('info', 'Stop requested — finishing the current lead first');
+    } else if (!alreadyRequested) {
+      pushLog('info',
+        'Stop requested — finishing the current lead first (press Stop again to abort the current call immediately)');
+    } else if (!S.forceAbort) {
+      S.forceAbort = true;
+      pushLog('info', 'Force-stop — aborting the current call, no outcome will be logged');
     }
+    // Further presses while already force-stopping: nothing new to do or log.
   }
 
   function handleDecision(action) {
