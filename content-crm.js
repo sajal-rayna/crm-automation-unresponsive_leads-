@@ -658,10 +658,11 @@
     });
 
     // 3. Save Outcome (RSVP / PreferredDeveloper chips are never touched).
-    // The fresh-toast detector is created BEFORE clicking, so a confirm toast
-    // still lingering from the previous lead can't satisfy this lead — and its
-    // forgive-on-disappear logic means an identical new toast still counts.
+    // Both confirmation detectors are created BEFORE clicking, so anything
+    // already on screen (a stale toast, the reason text in the form itself)
+    // can't satisfy this lead's confirmation.
     const freshConfirm = makeFreshToastDetector(C.CRM.SAVE_CONFIRM_RE);
+    const reasonMarker = makeReasonMarkerDetector(reason);
     await act('click "Save Outcome"', async () => {
       const btn = await waitFor(
         () => findButton(C.CRM.SAVE_OUTCOME_TEXT) || learnedEl('save-outcome'), 4000);
@@ -669,10 +670,15 @@
       btn.click();
     }, 'save-outcome');
 
-    // 4. Wait for a FRESH save confirmation (spec: "Save Outcome -> wait for
-    // confirm"). Without one we pause rather than risk silently unlogged leads;
-    // set CRM.REQUIRE_SAVE_CONFIRM=false in config.js if your CRM shows no toast.
-    const confirmed = await waitFor(freshConfirm, C.CRM.SAVE_CONFIRM_TIMEOUT_MS, 250);
+    // 4. Wait for proof the save landed (spec: "Save Outcome -> wait for
+    // confirm"). The live CRM shows no matching toast, but a successful save
+    // DOES change the page — a new Activity feed entry appears with the reason
+    // text (e.g. "left voicemail") and/or the outcome form resets. Accept a
+    // fresh confirm toast OR that reason-text change as confirmation; pause
+    // only if NEITHER appears (set CRM.REQUIRE_SAVE_CONFIRM=false to downgrade
+    // that pause to a warning).
+    const confirmed = await waitFor(
+      () => freshConfirm() || reasonMarker(), C.CRM.SAVE_CONFIRM_TIMEOUT_MS, 250);
     if (!confirmed) {
       if (C.CRM.REQUIRE_SAVE_CONFIRM) {
         throw new ActionError(
@@ -684,6 +690,26 @@
     }
 
     pushLog('ok', `Logged: ${reason}`);
+  }
+
+  // Detects the page-level footprint of a successful save: the Activity feed
+  // gains an entry containing the reason ("left voicemail" / "no_answer" —
+  // underscores and case vary, so counting is done on normalized text), and/or
+  // the outcome form resets (removing the selected reason). Either way the
+  // number of occurrences of the reason text CHANGES from the pre-save
+  // baseline; while nothing happens it stays identical.
+  function normalizedBodyCount(needle) {
+    const hay = (document.body.innerText || '').toLowerCase().replace(/[_\W]+/g, ' ');
+    let n = 0;
+    let i = 0;
+    while ((i = hay.indexOf(needle, i)) !== -1) { n += 1; i += needle.length; }
+    return n;
+  }
+
+  function makeReasonMarkerDetector(reason) {
+    const needle = reason.toLowerCase().replace(/[_\W]+/g, ' ').trim();
+    const before = normalizedBodyCount(needle);
+    return () => normalizedBodyCount(needle) !== before;
   }
 
   function looksSelected(el) {

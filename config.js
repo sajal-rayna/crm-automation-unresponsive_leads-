@@ -140,7 +140,7 @@ globalThis.RAYNA = (() => {
     TOAST_SELECTOR:
       '[role="alert"], [role="status"], [class*="toast" i], [class*="Toastify"],' +
       ' [class*="snackbar" i], [class*="notification" i]',
-    SAVE_CONFIRM_RE: /saved|success|updated|logged/i,
+    SAVE_CONFIRM_RE: /saved|success|updated|logged|recorded/i,
     SAVE_CONFIRM_TIMEOUT_MS: 8000,
     // Spec: "Save Outcome -> wait for confirm". With true (default) the engine
     // PAUSES if no fresh confirmation toast appears, so a failing save can
