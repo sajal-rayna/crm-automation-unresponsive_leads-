@@ -227,14 +227,13 @@
     }
 
     const counterM = bodyText.match(C.CRM.COUNTER_RE);
-    const tagM = bodyText.match(C.CRM.CAMPAIGN_TAG_RE);
 
     return {
       name: name || '',
       firstName: (name || '').split(/\s+/)[0] || '',
       phone: phone || '',
       email: email || '',
-      campaignTag: tagM ? tagM[1] : '',
+      campaignTag: C.findCampaignTag(bodyText),
       counter: counterM ? `${counterM[1]} of ${counterM[2]}` : '',
     };
   }
@@ -260,37 +259,72 @@
     return `${l.name}|${l.counter}`;
   }
 
-  // The Raw Source Data card (holding the CampaignTag JSON) is collapsed by
-  // default. At dial time, expand it once so the campaign shows on the panel
-  // by the time a call connects. Only ever clicks a toggle that currently
-  // reads "Show"/"View"/"Expand" inside that card — nothing else.
-  async function ensureCampaignVisible() {
-    if (C.CRM.CAMPAIGN_TAG_RE.test(document.body.innerText || '')) return;
-    let clicked = false;
-    // No childElementCount cap here: a real "Show" control commonly wraps a
-    // chevron/icon element, which textOf() (innerText-based) still reduces to
-    // exactly "Show" — an element-count filter would just skip past it.
-    for (const el of document.querySelectorAll('button, [role="button"], a, span, div')) {
-      if (!isVisible(el) || !C.CRM.RAW_SOURCE_TOGGLE_RE.test(textOf(el))) continue;
-      let node = el.parentElement;
-      for (let i = 0; node && node !== document.body && i < 6; i++) {
-        if (C.CRM.RAW_SOURCE_RE.test(node.innerText || '')) {
-          el.click();
-          clicked = true;
-          break;
-        }
-        node = node.parentElement;
-      }
-      if (clicked) break;
+  // The card element that contains the "Raw Source Data" header (stops before
+  // swallowing a sibling card like Lead Information).
+  function rawSourceCard() {
+    const header = findByExactText(/^Raw Source Data$/i);
+    if (!header) return null;
+    let card = header;
+    let node = header.parentElement;
+    for (let i = 0; node && node !== document.body && i < 6; i++) {
+      if (/Lead Information|Activity & Calls|Lead Journey/i.test(node.innerText || '')) break;
+      card = node;
+      node = node.parentElement;
     }
-    if (!clicked) {
-      pushLog('warn',
-        'Could not find the Raw Source Data toggle — campaign tag unavailable this lead (check CRM.RAW_SOURCE_TOGGLE_RE / RAW_SOURCE_RE in config.js)');
+    return card;
+  }
+
+  // The Raw Source Data card (holding the CampaignTag string) is collapsed by
+  // default, and even expanded the SOURCE value may sit under a field-category
+  // tab or render truncated. Staged, all read-only: (1) expand, (2) switch to
+  // a tab that includes the field, (3) filter via the card's own search box —
+  // checking for the tag after each stage.
+  async function ensureCampaignVisible() {
+    const tagPresent = () => !!C.findCampaignTag(document.body.innerText || '');
+    if (tagPresent()) return;
+
+    const card = rawSourceCard();
+    if (!card) {
+      pushLog('warn', 'Raw Source Data card not found on this page — no campaign tag');
       return;
     }
-    const found = await waitFor(
-      () => C.CRM.CAMPAIGN_TAG_RE.test(document.body.innerText || ''), 2500, 200);
-    if (!found) pushLog('warn', 'Expanded Raw Source Data but found no CampaignTag inside it');
+
+    // Stage 1: expand (no-op when the toggle already reads "Hide").
+    for (const el of card.querySelectorAll('button, [role="button"], a, span, div')) {
+      if (isVisible(el) && C.CRM.RAW_SOURCE_TOGGLE_RE.test(textOf(el))) { el.click(); break; }
+    }
+    if (await waitFor(tagPresent, 2000, 200)) return;
+
+    // Stage 2: the expanded card has field-category tabs ("All 5",
+    // "Custom Fields 3") — activate one that includes the SOURCE field.
+    for (const tabRe of C.CRM.RAW_SOURCE_TAB_RES) {
+      const tab = [...card.querySelectorAll('button, [role="tab"], [role="button"], a, div, span')]
+        .find((el) => isVisible(el) && el.childElementCount <= 3 && tabRe.test(textOf(el)));
+      if (tab) {
+        tab.click();
+        if (await waitFor(tagPresent, 1500, 200)) return;
+      }
+    }
+
+    // Stage 3: type into the card's own search box — filtering to the field
+    // renders it (and, on this CRM, untruncated).
+    const search = [...card.querySelectorAll('input')].find(
+      (el) => isVisible(el) && /search/i.test(el.placeholder || ''));
+    if (search) {
+      setNativeInputValue(search, C.CRM.RAW_SOURCE_SEARCH_TERM);
+      if (await waitFor(tagPresent, 2000, 200)) return;
+    }
+
+    pushLog('warn',
+      'Raw Source Data is open but no CampaignTag could be parsed — copy the SOURCE field text into a message so the patterns (config.js CRM.CAMPAIGN_TAG_RES) can be tuned');
+  }
+
+  function setNativeInputValue(input, value) {
+    const proto = Object.getPrototypeOf(input);
+    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (desc && desc.set) desc.set.call(input, value);
+    else input.value = value;
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, data: value }));
   }
 
   // ---------------------------------------------------------------------------

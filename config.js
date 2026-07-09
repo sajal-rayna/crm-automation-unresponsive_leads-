@@ -97,16 +97,27 @@ globalThis.RAYNA = (() => {
     // Python-dict-style string, NOT JSON: keys in single quotes, values in
     // single OR double quotes (double when the value itself has an apostrophe,
     // e.g. 'CampaignTag': "DPE Toronto - November'25"), sometimes rendered
-    // with curly quotes. So: accept any quote style around key and value, and
-    // end the value at a quote followed by , } or ] — a bare apostrophe inside
-    // the value (November'25) does not terminate it. Falls back to
-    // Campaignname, which carries the same value.
-    CAMPAIGN_TAG_RE:
+    // with curly quotes — and long values can render TRUNCATED, losing the
+    // closing quote. Patterns are tried in order; first capture wins.
+    // Falls back to Campaignname, which carries the same value.
+    CAMPAIGN_TAG_RES: [
+      // 1. Fully quoted value terminated by quote + , } ] — keeps apostrophes
+      //    inside the value (November'25) intact.
       /Campaign(?:Tag|name)['"‘’“”]?\s*[:=]\s*['"‘’“”]\s*(.+?)\s*['"‘’“”]\s*[,}\]]/,
+      // 2. Quoted value with no clean terminator (truncated render / end of
+      //    text) — stops at the next quote-ish char, may lose a trailing 'YY.
+      /Campaign(?:Tag|name)['"‘’“”]?\s*[:=]\s*['"‘’“”]\s*([^'"‘’“”\n]{3,80})/,
+      // 3. Unquoted value up to comma / brace / newline.
+      /Campaign(?:Tag|name)['"‘’“”]?\s*[:=]\s*([^,'"‘’“”}\]\n]{3,80})/,
+    ],
     // The Raw Source Data card is collapsed by default — the engine clicks its
     // "Show" toggle once per lead (at dial time) so the CampaignTag is readable.
+    // If the tag still isn't in the text, it tries the card's field-category
+    // tabs and finally types RAW_SOURCE_SEARCH_TERM into the card's search box.
     RAW_SOURCE_RE: /Raw Source Data/i,
     RAW_SOURCE_TOGGLE_RE: /^(Show|View|Expand)$/i,
+    RAW_SOURCE_TAB_RES: [/^All\b/i, /^Custom Fields\b/i],
+    RAW_SOURCE_SEARCH_TERM: 'CampaignTag',
 
     // Lead Information card field labels (exact element text, trimmed; the
     // live CRM renders some with a trailing colon and/or uppercase)
@@ -285,6 +296,18 @@ globalThis.RAYNA = (() => {
     return template.replace(/\[(Client\s*Name|First\s*Name|FirstName)\]/gi, firstName || 'there');
   }
 
+  // Try each CampaignTag pattern in order; first plausible capture wins.
+  function findCampaignTag(text) {
+    for (const re of CRM.CAMPAIGN_TAG_RES) {
+      const m = (text || '').match(re);
+      if (m && m[1]) {
+        const tag = m[1].replace(/…+$/, '').replace(/\.{3,}$/, '').trim();
+        if (tag.length >= 3) return tag;
+      }
+    }
+    return '';
+  }
+
   // ---------------------------------------------------------------------------
   // Call-listening cues — matched against what YOU say on a connected call.
   // Deliberately distinctive phrases only: generic politeness ("have a great
@@ -361,6 +384,7 @@ globalThis.RAYNA = (() => {
     FORBIDDEN_CLICK_RE,
     TEMPLATES,
     fillTemplate,
+    findCampaignTag,
     MSG,
     CMD,
     getSettings,
