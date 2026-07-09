@@ -62,10 +62,18 @@ globalThis.RAYNA = (() => {
     LEAD_PATH: '/lead/',
     TAB_URL_PATTERN: '*://crm.rayna-properties.com/*',
 
-    // One button cycles Call Now -> On Call... -> End Call
+    // One button cycles Call Now -> On Call... -> End Call for STATE READING.
+    // On the live CRM the top toggle only ever shows "Call Now" / "On Call..."
+    // (a status indicator) — the actual hang-up control is a SEPARATE "End
+    // Call" button inside an "Active Call" panel that appears once connected.
+    // So this regex is used to read state, but NEVER to click a hang-up — see
+    // END_CALL_TEXT below.
     CALL_BUTTON_TEXT: /^(Call Now|On Call|End Call)/i,
     CALL_NOW_TEXT: /^Call Now/i,
     IN_CALL_TEXT: /^(On Call|End Call)/i,
+    // The real hang-up control (exact text). Tried BEFORE the ambiguous top
+    // toggle so a status-only "On Call..." can never be clicked as if it hangs up.
+    END_CALL_TEXT: /^End Call$/i,
 
     // Softphone state tokens (exact element text, trimmed)
     STATE_TOKEN_RE: /^(Calling|Ringing\.{0,3}|Connected)$/i,

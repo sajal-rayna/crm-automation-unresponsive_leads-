@@ -157,6 +157,23 @@ Streams, Section 6 of the handoff doc, with proper consent handling); suggestion
 trigger actions — voicemail/live/RSVP decisions stay yours; nothing is stored except
 cue tags, decisions, and timings (no transcripts, no audio).
 
+## Known live-CRM fixes (v1.2.1)
+
+- **Hang-up now targets the real "End Call" control.** On this CRM, the top toggle
+  only ever shows status text ("Call Now" / "On Call...") — the actual hang-up button
+  is a separate "End Call" control inside an "Active Call" panel that appears once
+  connected. Clicking the top toggle to hang up did nothing, which is why almost every
+  call that needed to end (Voicemail, Skip, and the outcome-logging that follows) was
+  pausing with a selector error. Fixed to look for the exact "End Call" button first.
+- **Stop now always works, even mid-call.** Previously, pressing Stop while a call was
+  connected and awaiting your Voicemail/Live/Pre-stage/Skip decision only set a flag —
+  if you never pressed one of those four buttons (e.g. you hung up from the CRM's own
+  controls instead), the session would wait forever. Stop now hangs up immediately and
+  ends the session with no outcome logged, if pressed while a decision is pending.
+- **Campaign tag capture hardened.** The Raw Source Data toggle search no longer skips
+  a "Show" control that wraps an icon, and now logs a warning if it still can't find the
+  toggle or the tag — so a future miss will say exactly why instead of failing silently.
+
 ## Behaviour notes
 
 - Softphone state/timer are read only inside the softphone panel (found by climbing up

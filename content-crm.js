@@ -266,19 +266,31 @@
   // reads "Show"/"View"/"Expand" inside that card — nothing else.
   async function ensureCampaignVisible() {
     if (C.CRM.CAMPAIGN_TAG_RE.test(document.body.innerText || '')) return;
-    for (const el of document.querySelectorAll('button, [role="button"], a, span')) {
-      if (el.childElementCount > 1) continue;
-      if (!C.CRM.RAW_SOURCE_TOGGLE_RE.test(textOf(el)) || !isVisible(el)) continue;
+    let clicked = false;
+    // No childElementCount cap here: a real "Show" control commonly wraps a
+    // chevron/icon element, which textOf() (innerText-based) still reduces to
+    // exactly "Show" — an element-count filter would just skip past it.
+    for (const el of document.querySelectorAll('button, [role="button"], a, span, div')) {
+      if (!isVisible(el) || !C.CRM.RAW_SOURCE_TOGGLE_RE.test(textOf(el))) continue;
       let node = el.parentElement;
       for (let i = 0; node && node !== document.body && i < 6; i++) {
         if (C.CRM.RAW_SOURCE_RE.test(node.innerText || '')) {
           el.click();
-          await sleep(600); // let the JSON render
-          return;
+          clicked = true;
+          break;
         }
         node = node.parentElement;
       }
+      if (clicked) break;
     }
+    if (!clicked) {
+      pushLog('warn',
+        'Could not find the Raw Source Data toggle — campaign tag unavailable this lead (check CRM.RAW_SOURCE_TOGGLE_RE / RAW_SOURCE_RE in config.js)');
+      return;
+    }
+    const found = await waitFor(
+      () => C.CRM.CAMPAIGN_TAG_RE.test(document.body.innerText || ''), 2500, 200);
+    if (!found) pushLog('warn', 'Expanded Raw Source Data but found no CampaignTag inside it');
   }
 
   // ---------------------------------------------------------------------------
@@ -534,18 +546,26 @@
     });
   }
 
+  function callIsIdle() {
+    const b = findButton(C.CRM.CALL_BUTTON_TEXT);
+    return !b || C.CRM.CALL_NOW_TEXT.test(textOf(b));
+  }
+
   async function endCall() {
-    const btn = findButton(C.CRM.CALL_BUTTON_TEXT);
-    if (!btn || !C.CRM.IN_CALL_TEXT.test(textOf(btn))) return; // already idle
+    if (callIsIdle()) return; // nothing to hang up
     await act('hang up the call (End Call)', async () => {
+      // Prefer the dedicated "End Call" control (seen inside an "Active Call"
+      // panel on the live CRM) over the ambiguous top toggle, which can just
+      // show status text ("On Call...") without ending anything when clicked.
+      const btn = await waitFor(
+        () => findButton(C.CRM.END_CALL_TEXT) || learnedEl('end-call') || findButton(C.CRM.CALL_BUTTON_TEXT),
+        4000);
+      if (!btn) throw new Error('End Call button not found');
       btn.click();
-      const backToIdle = await waitFor(() => {
-        const b = findButton(C.CRM.CALL_BUTTON_TEXT);
-        return b && C.CRM.CALL_NOW_TEXT.test(textOf(b));
-      }, 8000);
+      const backToIdle = await waitFor(callIsIdle, 8000);
       // Never log/advance while the line might still be open — pause instead.
       if (!backToIdle) throw new Error('button never returned to "Call Now"');
-    });
+    }, 'end-call');
   }
 
   // Watch the softphone after dialing.
@@ -933,6 +953,17 @@
       }
       recordListenOutcome(decision);
 
+      if (decision === 'stop') {
+        // Operator pressed Stop mid-call: hang up, log nothing (a fabricated
+        // outcome would violate the "decisions stay manual" rule), and leave
+        // the lead exactly as-is. The session loop exits right after this
+        // because stopRequested is already true.
+        stopListening();
+        await endCall();
+        pushLog('info', 'Stopped mid-call — no outcome logged; this lead was left as-is');
+        return;
+      }
+
       if (decision === 'voicemail') {
         stopListening();
         await endCall();
@@ -1067,7 +1098,13 @@
   function requestStop() {
     if (!S.running) return;
     S.stopRequested = true;
-    if (pendingResume) {
+    if (pendingDecision) {
+      // Stop must always be able to end the session — don't leave the
+      // operator stuck forever waiting on Voicemail/Live/Pre-stage/Skip (e.g.
+      // if they ended the call from the CRM's own controls instead of here).
+      pushLog('info', 'Stop requested while a call is connected — hanging up, no outcome logged, ending the session');
+      pendingDecision.resolve('stop');
+    } else if (pendingResume) {
       // Stopping while frozen ends the session in place — no logging, no
       // advancing happens after a freeze, so nothing is skipped.
       pushLog('info', 'Stop requested while frozen — ending the session');
