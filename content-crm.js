@@ -233,7 +233,7 @@
       firstName: (name || '').split(/\s+/)[0] || '',
       phone: phone || '',
       email: email || '',
-      campaignTag: C.findCampaignTag(bodyText),
+      campaignTag: readCampaignTag(),
       counter: counterM ? `${counterM[1]} of ${counterM[2]}` : '',
     };
   }
@@ -259,6 +259,36 @@
     return `${l.name}|${l.counter}`;
   }
 
+  // Text inside open shadow roots under `root` — widget libraries render card
+  // content there, where innerText/textContent of the page can't see it.
+  function shadowTextUnder(root) {
+    const acc = [];
+    const visit = (el) => {
+      if (el.shadowRoot) {
+        acc.push(el.shadowRoot.textContent || '');
+        for (const inner of el.shadowRoot.querySelectorAll('*')) visit(inner);
+      }
+    };
+    for (const el of (root || document.body).querySelectorAll('*')) visit(el);
+    return acc.join('\n');
+  }
+
+  // The campaign tag, read from progressively deeper sources: rendered page
+  // text -> the raw-source card's full textContent (includes text CSS has
+  // truncated with an ellipsis) -> shadow-DOM text.
+  function readCampaignTag() {
+    let tag = C.findCampaignTag(document.body.innerText || '');
+    if (tag) return tag;
+    const card = rawSourceCard();
+    if (card) {
+      tag = C.findCampaignTag(card.textContent || '');
+      if (tag) return tag;
+      tag = C.findCampaignTag(shadowTextUnder(card));
+      if (tag) return tag;
+    }
+    return C.findCampaignTag(shadowTextUnder(document.body));
+  }
+
   // The card element that contains the "Raw Source Data" header (stops before
   // swallowing a sibling card like Lead Information).
   function rawSourceCard() {
@@ -280,7 +310,7 @@
   // a tab that includes the field, (3) filter via the card's own search box —
   // checking for the tag after each stage.
   async function ensureCampaignVisible() {
-    const tagPresent = () => !!C.findCampaignTag(document.body.innerText || '');
+    const tagPresent = () => !!readCampaignTag();
     if (tagPresent()) return;
 
     const card = rawSourceCard();
@@ -315,8 +345,14 @@
       if (await waitFor(tagPresent, 2000, 200)) return;
     }
 
+    // Diagnostics: say WHERE the raw text is (or isn't) so the next report
+    // pins the failure to regex vs rendering vs shadow DOM.
+    const bodyHas = /ProspectId/i.test(document.body.innerText || '');
+    const cardHas = /ProspectId/i.test(card.textContent || '');
+    const shadowHas = /ProspectId/i.test(shadowTextUnder(card));
     pushLog('warn',
-      'Raw Source Data is open but no CampaignTag could be parsed — copy the SOURCE field text into a message so the patterns (config.js CRM.CAMPAIGN_TAG_RES) can be tuned');
+      `No CampaignTag parsed (source text seen: page=${bodyHas} card=${cardHas} shadow=${shadowHas}) — ` +
+      'if any of those is true, send this log line + the SOURCE text to tune config.js CRM.CAMPAIGN_TAG_RES');
   }
 
   function setNativeInputValue(input, value) {

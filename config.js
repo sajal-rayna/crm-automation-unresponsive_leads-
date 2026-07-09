@@ -100,15 +100,18 @@ globalThis.RAYNA = (() => {
     // with curly quotes — and long values can render TRUNCATED, losing the
     // closing quote. Patterns are tried in order; first capture wins.
     // Falls back to Campaignname, which carries the same value.
+    // The key tolerates internal whitespace ("Campaign Tag") because renderers
+    // can break long strings mid-word; findCampaignTag() normalizes the text
+    // (strips zero-width chars, collapses newlines) before matching.
     CAMPAIGN_TAG_RES: [
       // 1. Fully quoted value terminated by quote + , } ] — keeps apostrophes
       //    inside the value (November'25) intact.
-      /Campaign(?:Tag|name)['"‘’“”]?\s*[:=]\s*['"‘’“”]\s*(.+?)\s*['"‘’“”]\s*[,}\]]/,
+      /Campaign\s*(?:Tag|name)['"‘’“”]?\s*[:=]\s*['"‘’“”]\s*(.+?)\s*['"‘’“”]\s*[,}\]]/,
       // 2. Quoted value with no clean terminator (truncated render / end of
       //    text) — stops at the next quote-ish char, may lose a trailing 'YY.
-      /Campaign(?:Tag|name)['"‘’“”]?\s*[:=]\s*['"‘’“”]\s*([^'"‘’“”\n]{3,80})/,
+      /Campaign\s*(?:Tag|name)['"‘’“”]?\s*[:=]\s*['"‘’“”]\s*([^'"‘’“”\n]{3,80})/,
       // 3. Unquoted value up to comma / brace / newline.
-      /Campaign(?:Tag|name)['"‘’“”]?\s*[:=]\s*([^,'"‘’“”}\]\n]{3,80})/,
+      /Campaign\s*(?:Tag|name)['"‘’“”]?\s*[:=]\s*([^,'"‘’“”}\]\n]{3,80})/,
     ],
     // The Raw Source Data card is collapsed by default — the engine clicks its
     // "Show" toggle once per lead (at dial time) so the CampaignTag is readable.
@@ -297,9 +300,16 @@ globalThis.RAYNA = (() => {
   }
 
   // Try each CampaignTag pattern in order; first plausible capture wins.
+  // Normalizes first: strips invisible characters renderers inject into long
+  // strings (zero-width spaces, soft hyphens, word joiners) and collapses all
+  // whitespace/newlines to single spaces, so a value wrapped mid-word in the
+  // DOM still matches.
   function findCampaignTag(text) {
+    const clean = (text || '')
+      .replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, '')
+      .replace(/\s+/g, ' ');
     for (const re of CRM.CAMPAIGN_TAG_RES) {
-      const m = (text || '').match(re);
+      const m = clean.match(re);
       if (m && m[1]) {
         const tag = m[1].replace(/…+$/, '').replace(/\.{3,}$/, '').trim();
         if (tag.length >= 3) return tag;
