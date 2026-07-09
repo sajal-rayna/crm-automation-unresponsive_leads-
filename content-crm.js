@@ -325,6 +325,17 @@
     }
     if (await waitFor(tagPresent, 2000, 200)) return;
 
+    // Stage 1.5: lazy/virtualized rows (the SOURCE field sits below the fold
+    // under CUSTOM FIELDS) may not render until scrolled into view — scroll
+    // the card and any scrollable region inside it through their full height.
+    try {
+      card.scrollIntoView({ block: 'center' });
+      for (const el of [card, ...card.querySelectorAll('*')]) {
+        if (el.scrollHeight > el.clientHeight + 10) el.scrollTop = el.scrollHeight;
+      }
+    } catch (e) { /* keep going — scrolling is best-effort */ }
+    if (await waitFor(tagPresent, 1500, 200)) return;
+
     // Stage 2: the expanded card has field-category tabs ("All 5",
     // "Custom Fields 3") — activate one that includes the SOURCE field.
     for (const tabRe of C.CRM.RAW_SOURCE_TAB_RES) {
