@@ -93,8 +93,16 @@ globalThis.RAYNA = (() => {
     // Queue position, e.g. "33 of 156"
     COUNTER_RE: /(\d+)\s+of\s+(\d+)/,
 
-    // CampaignTag out of the Raw Source Data JSON text
-    CAMPAIGN_TAG_RE: /CampaignTag"?\s*[:=]\s*"([^"]+)"/,
+    // CampaignTag out of the Raw Source Data text. The live CRM stores a
+    // Python-dict-style string, NOT JSON: keys in single quotes, values in
+    // single OR double quotes (double when the value itself has an apostrophe,
+    // e.g. 'CampaignTag': "DPE Toronto - November'25"), sometimes rendered
+    // with curly quotes. So: accept any quote style around key and value, and
+    // end the value at a quote followed by , } or ] — a bare apostrophe inside
+    // the value (November'25) does not terminate it. Falls back to
+    // Campaignname, which carries the same value.
+    CAMPAIGN_TAG_RE:
+      /Campaign(?:Tag|name)['"‘’“”]?\s*[:=]\s*['"‘’“”]\s*(.+?)\s*['"‘’“”]\s*[,}\]]/,
     // The Raw Source Data card is collapsed by default — the engine clicks its
     // "Show" toggle once per lead (at dial time) so the CampaignTag is readable.
     RAW_SOURCE_RE: /Raw Source Data/i,

@@ -92,7 +92,9 @@ rayna-autodialer/
 - Call button: `button` whose text matches `/^(Call Now|On Call|End Call)/i`
 - Call state: softphone panel innerText tokens `Calling | Ringing... | Connected` + `MM:SS` timer
 - Queue counter: text like `"33 of 156"`
-- CampaignTag: regex `CampaignTag"?\s*[:=]\s*"([^"]+)"` against Source JSON text
+- CampaignTag: quote-style-tolerant regex against the Raw Source Data text (the live
+  CRM stores a Python-dict-style string — single-quoted keys, single/double/curly-quoted
+  values, apostrophes inside values like `November'25`); also falls back to `Campaignname`
 - Reason dropdown: click the "Select reason..." trigger, then click the option whose text exactly equals the target
 - Reason labels (exact): No Answer, Busy, Left Voicemail, Call Dropped, Technical Failure, Wrong Number, Invalid / Not in Service
 - Not Connected toggle, Save Outcome, Next: by visible text/role
