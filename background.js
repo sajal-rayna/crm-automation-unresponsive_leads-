@@ -181,6 +181,81 @@ async function handleTranscribe(msg) {
 }
 
 // ---------------------------------------------------------------------------
+// Campaign probe: runs in the PAGE's JS world (world: MAIN) and walks the
+// React fiber props/state around the Raw Source Data header for CampaignTag
+// values the UI hasn't rendered — works even when the card never expands.
+// Personal-use read of the user's own CRM page state; touches nothing.
+// ---------------------------------------------------------------------------
+function CAMPAIGN_PROBE_FN() {
+  try {
+    const found = new Set();
+    const seen = new Set();
+    const record = (v) => {
+      if (typeof v === 'string' && v.trim().length >= 3 && v.length <= 120) found.add(v.trim());
+    };
+    const extract = (s) => {
+      const m = s.match(/Campaign(?:Tag|name)\\?["'‘’“”]?\s*[:=]\s*\\?["'‘’“”]\s*([^"'‘’“”\\]{3,80})/);
+      if (m) record(m[1]);
+    };
+    const visit = (obj, depth) => {
+      if (obj == null || seen.size > 30000) return;
+      const t = typeof obj;
+      if (t === 'string') { if (obj.indexOf('Campaign') !== -1) extract(obj); return; }
+      if (t !== 'object') return;
+      if (seen.has(obj) || depth > 6) return;
+      seen.add(obj);
+      if (obj.nodeType) return; // never wander into DOM nodes
+      let keys;
+      try { keys = Object.keys(obj); } catch (e) { return; }
+      for (const k of keys) {
+        let v;
+        try { v = obj[k]; } catch (e) { continue; }
+        if (k === 'CampaignTag' || k === 'Campaignname') { record(v); continue; }
+        visit(v, depth + 1);
+      }
+    };
+    const headers = [];
+    for (const el of document.querySelectorAll('*')) {
+      if (el.childElementCount <= 2 && /^Raw Source Data$/i.test((el.innerText || '').trim())) {
+        headers.push(el);
+      }
+    }
+    for (const header of headers.slice(0, 2)) {
+      let node = header;
+      for (let up = 0; node && up < 10; up++) {
+        for (const key of Object.keys(node)) {
+          if (key.indexOf('__reactProps$') === 0) { visit(node[key], 0); continue; }
+          if (key.indexOf('__reactFiber$') === 0) {
+            let fiber = node[key];
+            for (let i = 0; fiber && i < 40; i++) {
+              visit(fiber.memoizedProps, 0);
+              visit(fiber.memoizedState, 0);
+              visit(fiber.pendingProps, 0);
+              fiber = fiber.return;
+            }
+          }
+        }
+        node = node.parentElement;
+      }
+    }
+    return Array.from(found);
+  } catch (e) {
+    return [];
+  }
+}
+
+async function handleCampaignProbe(sender) {
+  const tabId = sender && sender.tab && sender.tab.id;
+  if (!tabId) return { ok: false, error: 'no tab' };
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: 'MAIN',
+    func: CAMPAIGN_PROBE_FN,
+  });
+  return { ok: true, tags: (results && results[0] && results[0].result) || [] };
+}
+
+// ---------------------------------------------------------------------------
 // Message routing
 // ---------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -203,6 +278,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (msg.type === C.MSG.STT_TRANSCRIBE) {
     handleTranscribe(msg).then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
+    return true; // async response
+  }
+
+  if (msg.type === C.MSG.CAMPAIGN_PROBE) {
+    handleCampaignProbe(_sender).then(sendResponse)
       .catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
     return true; // async response
   }

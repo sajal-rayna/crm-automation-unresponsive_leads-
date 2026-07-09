@@ -42,6 +42,7 @@
     learned: null,        // cached RAYNA_LEARN data (refreshed on storage change)
     unmappedSeen: new Set(), // unrecognized toast texts already logged this session
     listen: { active: false, suggestion: null, cues: [], unavailable: false },
+    campaignFound: null,  // {key, value} from script-scan / page-state probe
   };
 
   function newTally() {
@@ -274,10 +275,21 @@
     return acc.join('\n');
   }
 
+  // Identifies the lead currently on screen (queue counter), so a tag found
+  // by the script-scan / state probe is only reused while that lead is shown.
+  function currentLeadKey() {
+    const m = (document.body.innerText || '').match(C.CRM.COUNTER_RE);
+    return m ? `${m[1]} of ${m[2]}` : '';
+  }
+
   // The campaign tag, read from progressively deeper sources: rendered page
   // text -> the raw-source card's full textContent (includes text CSS has
   // truncated with an ellipsis) -> shadow-DOM text.
   function readCampaignTag() {
+    if (S.campaignFound && S.campaignFound.value &&
+        S.campaignFound.key === currentLeadKey()) {
+      return S.campaignFound.value;
+    }
     let tag = C.findCampaignTag(document.body.innerText || '');
     if (tag) return tag;
     const card = rawSourceCard();
@@ -376,6 +388,12 @@
     if (toggle) clickHard(toggle);
     else pushLog('warn', 'Raw Source Data "Show" toggle not found — trying the other capture stages');
     if (await waitFor(tagPresent, 2000, 200)) return;
+    if (toggle) {
+      // Say exactly what was clicked so "wrong element" and "component
+      // ignored the synthetic click" are distinguishable from the log.
+      pushLog('warn',
+        `Clicked "${textOf(toggle).slice(0, 20)}" <${toggle.tagName.toLowerCase()}> on the Raw Source card but it did not expand — trying deeper capture`);
+    }
 
     // Stage 1.5: lazy/virtualized rows (the SOURCE field sits below the fold
     // under CUSTOM FIELDS) may not render until scrolled into view — scroll
@@ -408,6 +426,28 @@
       if (await waitFor(tagPresent, 2000, 200)) return;
     }
 
+    // Stage 4: the SPA's own <script> payloads (hydration/state JSON) — the
+    // DOM is shared with the page, so these are readable without any clicks.
+    let tag = campaignFromScripts();
+
+    // Stage 5: MAIN-world probe of the page's React props/state around the
+    // card (via the background worker) — reads the data the UI never rendered.
+    if (!tag) {
+      try {
+        const res = await chrome.runtime.sendMessage({ type: C.MSG.CAMPAIGN_PROBE });
+        if (res && res.ok && res.tags && res.tags.length) {
+          tag = String(res.tags[0]).trim();
+          if (res.tags.length > 1) {
+            pushLog('info', `Campaign probe found ${res.tags.length} candidates — using "${tag}"`);
+          }
+        }
+      } catch (e) { /* background unavailable — fall through */ }
+    }
+    if (tag) {
+      S.campaignFound = { key: currentLeadKey(), value: tag };
+      return;
+    }
+
     // Diagnostics: say WHERE the raw text is (or isn't) so the next report
     // pins the failure to regex vs rendering vs shadow DOM.
     const bodyHas = /ProspectId/i.test(document.body.innerText || '');
@@ -416,6 +456,34 @@
     pushLog('warn',
       `No CampaignTag parsed (source text seen: page=${bodyHas} card=${cardHas} shadow=${shadowHas}) — ` +
       'if any of those is true, send this log line + the SOURCE text to tune config.js CRM.CAMPAIGN_TAG_RES');
+  }
+
+  // Scan inline <script> tags for the tag (SSR/hydration blobs live in the
+  // shared DOM, so no world-crossing is needed). Blobs can hold several leads'
+  // data, so prefer the match nearest to the current lead's phone digits and
+  // only trust an ambiguous result when it's reasonably close.
+  function campaignFromScripts() {
+    const phoneTail = ((S.lead && S.lead.phone) || '').replace(/\D/g, '').slice(-7);
+    const re = /Campaign\s*(?:Tag|name)\\?["'‘’“”]?\s*[:=]\s*\\?["'‘’“”]\s*([^"'‘’“”\\]{3,80})/g;
+    const hits = [];
+    for (const s of document.querySelectorAll('script')) {
+      const txt = s.textContent || '';
+      if (txt.length < 30 || txt.indexOf('Campaign') === -1) continue;
+      const phoneAt = phoneTail ? txt.indexOf(phoneTail) : -1;
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(txt))) {
+        hits.push({
+          value: m[1].trim(),
+          dist: phoneAt === -1 ? Infinity : Math.abs(phoneAt - m.index),
+        });
+      }
+    }
+    if (!hits.length) return '';
+    hits.sort((a, b) => a.dist - b.dist);
+    const unique = new Set(hits.map((h) => h.value));
+    if (unique.size === 1) return hits[0].value;
+    return hits[0].dist < 5000 ? hits[0].value : '';
   }
 
   function setNativeInputValue(input, value) {
@@ -1213,7 +1281,9 @@
     S.tally = newTally();
     S.unmappedSeen = new Set();
     S.learned = await L.load();
-    pushLog('info', 'Session started');
+    let version = '';
+    try { version = chrome.runtime.getManifest().version; } catch (e) { /* n/a */ }
+    pushLog('info', `Session started (v${version || '?'})`);
 
     while (S.running && !S.stopRequested) {
       S.settings = await C.getSettings();
