@@ -464,26 +464,34 @@
   // only trust an ambiguous result when it's reasonably close.
   function campaignFromScripts() {
     const phoneTail = ((S.lead && S.lead.phone) || '').replace(/\D/g, '').slice(-7);
-    const re = /Campaign\s*(?:Tag|name)\\?["'‘’“”]?\s*[:=]\s*\\?["'‘’“”]\s*([^"'‘’“”\\]{3,80})/g;
-    const hits = [];
-    for (const s of document.querySelectorAll('script')) {
-      const txt = s.textContent || '';
-      if (txt.length < 30 || txt.indexOf('Campaign') === -1) continue;
-      const phoneAt = phoneTail ? txt.indexOf(phoneTail) : -1;
-      re.lastIndex = 0;
-      let m;
-      while ((m = re.exec(txt))) {
-        hits.push({
-          value: m[1].trim(),
-          dist: phoneAt === -1 ? Infinity : Math.abs(phoneAt - m.index),
-        });
+    // Strict first: the value ends only at a (possibly escaped) quote followed
+    // by , } ] — so apostrophes INSIDE the value (November'25) survive.
+    // Loose second, for truncated blobs with no clean terminator.
+    const RES = [
+      /Campaign\s*(?:Tag|name)\\?["'‘’“”]?\s*[:=]\s*\\?["'‘’“”]\s*(.+?)\\?["'‘’“”]\s*[,}\]]/g,
+      /Campaign\s*(?:Tag|name)\\?["'‘’“”]?\s*[:=]\s*\\?["'‘’“”]\s*([^"'‘’“”\\]{3,80})/g,
+    ];
+    for (const re of RES) {
+      const hits = [];
+      for (const s of document.querySelectorAll('script')) {
+        const txt = s.textContent || '';
+        if (txt.length < 30 || txt.indexOf('Campaign') === -1) continue;
+        const phoneAt = phoneTail ? txt.indexOf(phoneTail) : -1;
+        re.lastIndex = 0;
+        let m;
+        while ((m = re.exec(txt))) {
+          hits.push({
+            value: m[1].trim(),
+            dist: phoneAt === -1 ? Infinity : Math.abs(phoneAt - m.index),
+          });
+        }
       }
+      if (!hits.length) continue;
+      hits.sort((a, b) => a.dist - b.dist);
+      const unique = new Set(hits.map((h) => h.value));
+      if (unique.size === 1 || hits[0].dist < 5000) return hits[0].value;
     }
-    if (!hits.length) return '';
-    hits.sort((a, b) => a.dist - b.dist);
-    const unique = new Set(hits.map((h) => h.value));
-    if (unique.size === 1) return hits[0].value;
-    return hits[0].dist < 5000 ? hits[0].value : '';
+    return '';
   }
 
   function setNativeInputValue(input, value) {
@@ -1137,6 +1145,14 @@
     setPhase('reading');
     S.callStartedAt = null;
     S.connectedAt = null;
+    // After Next, the SPA re-renders progressively. Wait until the new lead is
+    // actually readable (name/phone AND queue counter) before trusting any
+    // extraction — otherwise a half-rendered page yields "Lead ?: (no name)"
+    // with stale data, and follow-up steps misbehave.
+    await waitFor(() => {
+      const l = extractLead();
+      return (l.name || l.phone) && l.counter;
+    }, 6000, 250);
     await ensureCampaignVisible();
     const lead = extractLead();
     S.lead = lead;

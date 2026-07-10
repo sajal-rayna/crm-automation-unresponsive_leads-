@@ -188,13 +188,21 @@ async function handleTranscribe(msg) {
 // ---------------------------------------------------------------------------
 function CAMPAIGN_PROBE_FN() {
   try {
+    // Values found under a literal CampaignTag/Campaignname key are exact —
+    // report them ahead of values regex-extracted out of string blobs.
+    const direct = new Set();
     const found = new Set();
     const seen = new Set();
-    const record = (v) => {
-      if (typeof v === 'string' && v.trim().length >= 3 && v.length <= 120) found.add(v.trim());
+    const record = (v, isDirect) => {
+      if (typeof v === 'string' && v.trim().length >= 3 && v.length <= 120) {
+        (isDirect ? direct : found).add(v.trim());
+      }
     };
     const extract = (s) => {
-      const m = s.match(/Campaign(?:Tag|name)\\?["'‘’“”]?\s*[:=]\s*\\?["'‘’“”]\s*([^"'‘’“”\\]{3,80})/);
+      // Terminator-aware first so apostrophes inside the value (November'25)
+      // survive; loose fallback for strings with no clean terminator.
+      let m = s.match(/Campaign(?:Tag|name)\\?["'‘’“”]?\s*[:=]\s*\\?["'‘’“”]\s*(.+?)\\?["'‘’“”]\s*[,}\]]/);
+      if (!m) m = s.match(/Campaign(?:Tag|name)\\?["'‘’“”]?\s*[:=]\s*\\?["'‘’“”]\s*([^"'‘’“”\\]{3,80})/);
       if (m) record(m[1]);
     };
     const visit = (obj, depth) => {
@@ -210,7 +218,7 @@ function CAMPAIGN_PROBE_FN() {
       for (const k of keys) {
         let v;
         try { v = obj[k]; } catch (e) { continue; }
-        if (k === 'CampaignTag' || k === 'Campaignname') { record(v); continue; }
+        if (k === 'CampaignTag' || k === 'Campaignname') { record(v, true); continue; }
         visit(v, depth + 1);
       }
     };
@@ -238,7 +246,7 @@ function CAMPAIGN_PROBE_FN() {
         node = node.parentElement;
       }
     }
-    return Array.from(found);
+    return [...direct, ...[...found].filter((v) => !direct.has(v))];
   } catch (e) {
     return [];
   }

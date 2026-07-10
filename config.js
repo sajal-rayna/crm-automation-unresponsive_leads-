@@ -47,10 +47,16 @@ globalThis.RAYNA = (() => {
   };
 
   // Failure-toast text -> Reason. First match wins; order the specific ones first.
+  // NOTE: these toasts are only evaluated while the call is RINGING. On this
+  // CRM a ring-time "Call ended ... disconnected" means the call was never
+  // answered (decline / carrier hangup) and the CRM's own call status records
+  // it as no_answer — so it maps to No Answer, keeping the tool's outcome
+  // consistent with the CRM's. "Call Dropped" is reserved for calls that
+  // actually connected first (a human judgment / manual log).
   const TOAST_REASON_MAP = [
     { re: /not in service|invalid number/i, reason: REASONS.INVALID },
     { re: /\bbusy\b/i, reason: REASONS.BUSY },
-    { re: /disconnect|dropped/i, reason: REASONS.DROPPED },
+    { re: /disconnect|dropped/i, reason: REASONS.NO_ANSWER },
     { re: /could not connect|call failed|technical/i, reason: REASONS.TECH_FAILURE },
   ];
 
