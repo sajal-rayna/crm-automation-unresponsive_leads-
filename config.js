@@ -118,7 +118,14 @@ globalThis.RAYNA = (() => {
       /Campaign\s*(?:Tag|name)['"‘’“”]?\s*[:=]\s*['"‘’“”]\s*([^'"‘’“”\n]{3,80})/,
       // 3. Unquoted value up to comma / brace / newline.
       /Campaign\s*(?:Tag|name)['"‘’“”]?\s*[:=]\s*([^,'"‘’“”}\]\n]{3,80})/,
+      // 4. The parsed-fields UI flattened to text: "Campaign Tag <value>
+      //    Campaignname ..." — label and value as separate elements, no colon.
+      /Campaign\s*Tag\s+(.{3,80}?)\s+Campaign\s*name/i,
     ],
+    // The updated CRM renders parsed source rows: a "Campaign Tag" label with
+    // the value in a SIBLING element (no colon; can wrap one char per line in
+    // narrow layouts). Read like any labeled field, label matched exactly:
+    CAMPAIGN_LABELS: [/^Campaign\s*Tag:?$/i, /^Campaign\s*name:?$/i],
     // The Raw Source Data card is collapsed by default — the engine clicks its
     // "Show" toggle once per lead (at dial time) so the CampaignTag is readable.
     // If the tag still isn't in the text, it tries the card's field-category

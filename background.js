@@ -218,7 +218,8 @@ function CAMPAIGN_PROBE_FN() {
       for (const k of keys) {
         let v;
         try { v = obj[k]; } catch (e) { continue; }
-        if (k === 'CampaignTag' || k === 'Campaignname') { record(v, true); continue; }
+        const nk = k.replace(/[\s_]/g, '').toLowerCase();
+        if (nk === 'campaigntag' || nk === 'campaignname') { record(v, true); continue; }
         visit(v, depth + 1);
       }
     };

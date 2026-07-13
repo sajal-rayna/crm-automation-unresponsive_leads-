@@ -290,6 +290,19 @@
         S.campaignFound.key === currentLeadKey()) {
       return S.campaignFound.value;
     }
+    // Parsed-fields UI: a "Campaign Tag" label with the value in a sibling
+    // element. Collapse whitespace (narrow layouts wrap the value one char
+    // per line) and reject a grab that swallowed neighboring rows.
+    for (const labelRe of C.CRM.CAMPAIGN_LABELS) {
+      const raw = labeledValue(labelRe);
+      if (!raw) continue;
+      const clean = raw.replace(/\s+/g, ' ').trim();
+      if (clean.length >= 3 && clean.length <= 80 &&
+          !/^[—–-]+$/.test(clean) &&
+          !/Campaign\s*name|Platform|Adsetname|Prospect/i.test(clean)) {
+        return clean;
+      }
+    }
     let tag = C.findCampaignTag(document.body.innerText || '');
     if (tag) return tag;
     const card = rawSourceCard();
