@@ -258,6 +258,16 @@ globalThis.RAYNA = (() => {
       'div[role="dialog"] textarea[name="to"]',
       'div[role="dialog"] div[name="to"] input',
       'input[aria-label*="To recipients" i]',
+      'div[role="dialog"] input[role="combobox"]',
+      'input[role="combobox"][peoplekit-id]',
+    ],
+    // A draft with no recipients opens with the To row COLLAPSED into a
+    // "Recipients" strip — the input exists but is hidden until this is
+    // clicked. Candidates for that strip:
+    TO_ACTIVATOR: [
+      'div[aria-label*="Recipients" i]',
+      '.aoD.hl',
+      'div[role="region"][aria-label^="To" i]',
     ],
     BODY_FIELD: [
       'div[role="dialog"] div[aria-label*="Message Body" i][contenteditable="true"]',

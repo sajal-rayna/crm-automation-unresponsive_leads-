@@ -125,7 +125,20 @@
   }
 
   async function setToField(dialog, email) {
-    const to = allVisible(C.GMAIL.TO_FIELD, dialog)[0];
+    let to = allVisible(C.GMAIL.TO_FIELD, dialog)[0];
+    if (!to) {
+      // Recipient-less drafts open with the To row collapsed into a
+      // "Recipients" strip — expand it, then look for the input again.
+      const activator = allVisible(C.GMAIL.TO_ACTIVATOR, dialog)[0] ||
+        [...dialog.querySelectorAll('div, span')].find((el) =>
+          isVisible(el) && el.childElementCount <= 2 &&
+          /^(Recipients|To)$/i.test(textOf(el)));
+      if (activator) {
+        guardedClick(activator, 'expanding the recipients row');
+        await sleep(700);
+        to = allVisible(C.GMAIL.TO_FIELD, dialog)[0];
+      }
+    }
     if (!to) return { ok: false, note: `To field not found — add ${email} manually` };
     // A reused compose window may still carry the PREVIOUS lead's chip; adding
     // ours next to it would address the email to both. Never type alongside an
