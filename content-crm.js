@@ -43,6 +43,7 @@
     unmappedSeen: new Set(), // unrecognized toast texts already logged this session
     listen: { active: false, suggestion: null, cues: [], unavailable: false },
     campaignFound: null,  // {key, value} from script-scan / page-state probe
+    showClickWarned: false, // Raw Source "Show" click warning logged this session
   };
 
   function newTally() {
@@ -402,11 +403,14 @@
     if (toggle) clickHard(toggle);
     else pushLog('warn', 'Raw Source Data "Show" toggle not found — trying the other capture stages');
     if (await waitFor(tagPresent, 2000, 200)) return;
-    if (toggle) {
+    if (toggle && !S.showClickWarned) {
       // Say exactly what was clicked so "wrong element" and "component
       // ignored the synthetic click" are distinguishable from the log.
+      // Once per session — the deeper stages reliably rescue the tag, so a
+      // per-lead repeat is just noise.
+      S.showClickWarned = true;
       pushLog('warn',
-        `Clicked "${textOf(toggle).slice(0, 20)}" <${toggle.tagName.toLowerCase()}> on the Raw Source card but it did not expand — trying deeper capture`);
+        `Clicked "${textOf(toggle).slice(0, 20)}" <${toggle.tagName.toLowerCase()}> on the Raw Source card but it did not expand — using deeper capture from now on (logged once per session)`);
     }
 
     // Stage 1.5: lazy/virtualized rows (the SOURCE field sits below the fold
@@ -866,31 +870,46 @@
       if (!looksSelected(el)) clickable(el).click();
     }, toggleKey);
 
-    // 2. Reason dropdown.
-    // *** BRITTLE #1: this is a custom React dropdown whose options only render
-    // while it is open. We click the "Select reason..." trigger, wait for the
-    // options to appear, then click the option whose text EXACTLY equals the
-    // target reason. If the CRM relabels anything, fix it in config.js. ***
-    await act(`select Reason "${reason}"`, async () => {
-      const trigger = await waitFor(
-        () => findByExactText(C.CRM.REASON_TRIGGER_TEXT) || learnedEl('reason-trigger'), 4000);
-      if (!trigger) {
-        const err = new Error('Reason dropdown trigger ("Select reason...") not found');
-        err.learnKey = 'reason-trigger';
-        throw err;
-      }
-      clickable(trigger).click();
-      const exactRe = new RegExp(`^${escapeRe(reason)}$`, 'i');
-      const option = await waitFor(
-        () => findOption(exactRe) || learnedEl(`reason-option:${reason}`), 4000, 100);
-      if (!option) {
-        document.body.click(); // close the dropdown so we do not leave it hanging
-        const err = new Error(`Reason option "${reason}" did not render`);
-        err.learnKey = `reason-option:${reason}`;
-        throw err;
-      }
-      option.click();
-    });
+    // 2. Outcome detail — the two toggle sides have DIFFERENT controls:
+    //    Not Connected -> the "Select reason..." dropdown;
+    //    Connected     -> the "How interested?" chip row (Hot/Warm/.../Not
+    //    Interested/DNC) — there is no reason dropdown on that side.
+    // Either way the value clicked is exactly what the operator chose on the
+    // panel — the tool never judges; RSVP/PreferredDeveloper stay untouched.
+    if (connected) {
+      await act(`select "How interested?" = "${reason}"`, async () => {
+        const chipRe = new RegExp(`^${escapeRe(reason)}$`, 'i');
+        const chip = await waitFor(
+          () => findButton(chipRe) || findByExactText(chipRe) ||
+            learnedEl(`interest-chip:${reason}`), 4000);
+        if (!chip) throw new Error(`"How interested?" option "${reason}" not found`);
+        if (!looksSelected(chip)) clickable(chip).click();
+      }, `interest-chip:${reason}`);
+    } else {
+      // *** BRITTLE #1: a custom React dropdown whose options only render
+      // while it is open. Click the "Select reason..." trigger, wait for the
+      // options, click the EXACT-text option. Relabels are config.js fixes. ***
+      await act(`select Reason "${reason}"`, async () => {
+        const trigger = await waitFor(
+          () => findByExactText(C.CRM.REASON_TRIGGER_TEXT) || learnedEl('reason-trigger'), 4000);
+        if (!trigger) {
+          const err = new Error('Reason dropdown trigger ("Select reason...") not found');
+          err.learnKey = 'reason-trigger';
+          throw err;
+        }
+        clickable(trigger).click();
+        const exactRe = new RegExp(`^${escapeRe(reason)}$`, 'i');
+        const option = await waitFor(
+          () => findOption(exactRe) || learnedEl(`reason-option:${reason}`), 4000, 100);
+        if (!option) {
+          document.body.click(); // close the dropdown so we do not leave it hanging
+          const err = new Error(`Reason option "${reason}" did not render`);
+          err.learnKey = `reason-option:${reason}`;
+          throw err;
+        }
+        option.click();
+      });
+    }
 
     // 3. Save Outcome (RSVP / PreferredDeveloper chips are never touched).
     // Both confirmation detectors are created BEFORE clicking, so anything
@@ -1343,6 +1362,7 @@
     S.dialedCount = 0;
     S.tally = newTally();
     S.unmappedSeen = new Set();
+    S.showClickWarned = false;
     S.learned = await L.load();
     let version = '';
     try { version = chrome.runtime.getManifest().version; } catch (e) { /* n/a */ }

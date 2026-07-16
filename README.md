@@ -23,8 +23,9 @@ human-judgment step and every "Send" action manual.
     turns interested, or log Not Interested and continue dialing if it turns out a no
     (no Resume needed).
   - **Pre-stage** -> fills the WhatsApp "If Interested" message + opens the Gmail RSVP draft (never sends), then freezes.
-  - **Not interested** -> hangs up, sets the toggle to **Connected**, logs
-    **Not Interested**, saves, advances.
+  - **Not interested** -> hangs up, sets the toggle to **Connected**, selects
+    **"How interested?" = Not Interested** (connected outcomes use the chip row —
+    the Reason dropdown only exists for Not Connected), saves, advances.
   - **Skip** -> hangs up and advances without logging.
 - Advances to the next lead and repeats.
 
