@@ -273,13 +273,15 @@ globalThis.RAYNA = (() => {
   // ---------------------------------------------------------------------------
   const TEMPLATES = {
     IF_INTERESTED:
-      "Hi [Client Name], Thank you for taking the time to speak with me just now! " +
-      "It was great connecting with you. As discussed, I have reserved your spot for " +
-      "our first ever exclusive Multideveloper Virtual Webinar on Dubai Real Estate " +
-      "on Saturday, July 25th. As mentioned this session is tailored specifically for " +
-      "our US & Canadian investors. Top Dubai developers will be unveiling exclusive " +
-      "offers, tax-free incentives, and high-yield investment options. We are sharing " +
-      "a formal invitation for the upcoming event and we will block your calendar shortly.",
+      "Hi [Client Name], This is Sajal Dubey, from Rayna Properties, Dubai. " +
+      "Thank you for taking the time to speak with me just now! It was great " +
+      "connecting with you. As discussed, I have reserved your spot for our first " +
+      "ever exclusive Multi-developer Virtual Webinar on Dubai Real Estate on " +
+      "Saturday, July 25th.\n\n" +
+      "As mentioned this session is tailored specifically for our US & Canadian " +
+      "investors. Top Dubai developers will be unveiling exclusive offers, tax-free " +
+      "incentives, and high-yield investment options. We are sharing a formal " +
+      "invitation for the upcoming event and we will block your calendar shortly.",
     IF_NOT_ANSWERED:
       "Hope you're having a great day! I just tried reaching you to share details about " +
       "our upcoming first time ever exclusive Multideveloper Virtual Webinar on Dubai " +
@@ -289,30 +291,19 @@ globalThis.RAYNA = (() => {
       "— today or tomorrow?",
     CALL_SCRIPT:
       "Hi! Am I speaking with (Client's Name)? Hi (Client's Name), this is (Your Name) " +
-      "calling from Rayna Properties. How are you doing today? You had shown interest in " +
-      "Dubai real estate opportunities in the past for our roadshow at (As per CRM " +
-      "details), so we wanted to personally invite you for an exclusive upcoming " +
-      "Multi-Developer Virtual Roadshow on Dubai Real Estate that we are hosting on " +
-      "25th July. This webinar is one of its own kind and Rayna properties is bringing " +
-      "this exclusively for our existing investors only for the first time ever! This is " +
-      "going to be a live online event starting 11am Central time Zone where Dubai's " +
-      "leading developers like Emaar, Nakheel, Sobha, Binghatti, Damac, Danube and " +
-      "Mantra will be presenting their latest projects, investment opportunities, " +
-      "exclusive offers specially curated for our international investors. The best part " +
-      "is — it's a completely complimentary invite-only session and one-on-one " +
-      "consultation will be scheduled after the webinar. In case you would want to have " +
-      "this one on one consultation scheduled right now to avail current ongoing offers " +
-      "and not wait for the webinar next month we could have the same scheduled for you. " +
-      "(Small Pause) So, (Client's Name), I just wanted to check if I can confirm your " +
-      "participation for the webinar on 25th July? If Yes, Any preferred developer.\n\n" +
-      "Developer time slots (US Central): Mantra 11:00 AM, Emaar 11:45 AM, Nakheel " +
-      "12:45 PM, Damac 1:30 PM, Binghatti 2:15 PM, Sobha 3:00 PM, Danube 3:45 PM.\n\n" +
-      "Close: Perfect! I'll have your registration confirmed and share a calendar invite " +
-      "with you shortly. Right after this call I'll also be sending you the invite with " +
-      "brief details and we will send you reminders before the webinar along with the " +
-      "Webinar link. We're looking forward to having you join us on 25th July for this " +
-      "exclusive Multideveloper Virtual Webinar on Dubai Real estate. Thank you once " +
-      "again, and have a great day!",
+      "calling from Rayna Properties. How are you doing today?\n\n" +
+      "The reason I'm calling, we're doing something we've never done before. A fully " +
+      "virtual roadshow on 25th July, bringing together the top 7 developers (emaar, " +
+      "nakheel etc) in Dubai, all in one place, for the first time.\n\n" +
+      "It's five back-to-back sessions on Zoom, 45-60 minutes each, one developer per " +
+      "slot, walking through their newest projects and best current offers. Since it's " +
+      "online, you join from wherever you are — no travel needed. Sound like something " +
+      "you'd want in on?\n\n" +
+      "One more thing, since it's 5-6 hours across all five developers, most guests do " +
+      "a quick 10-15 minute call with us beforehand. That way we understand what you're " +
+      "after - budget, location, investment or end-use and point you to the specific " +
+      "sessions worth your time, instead of sitting through all five. Would you be open " +
+      "to that before the 25th?",
   };
 
   // Fill [Client Name]/[FirstName]-style tokens in a template.
