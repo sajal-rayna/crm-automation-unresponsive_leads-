@@ -14,7 +14,14 @@ loads it from disk (don't delete it later).
 
 1. Open `chrome://extensions`
 2. Toggle **Developer mode** (top right)
-3. Click **Load unpacked** → select the extension folder
+3. Click **Load unpacked** → select the **`rayna-autodialer`** folder — the one
+   that **directly contains `manifest.json`** (open it in your file manager
+   first to check). Two common mistakes, especially on Windows:
+   - "Extract All" often nests the files one level deeper
+     (`...\rayna-autodialer-v1.7.2\rayna-autodialer\`) — pick the inner folder,
+     not the outer one, or you get *"Manifest file is missing or unreadable"*.
+   - Don't browse *inside the zip* — Windows shows zips like folders, but
+     Chrome can't load from one. Fully extract first (right-click → Extract All).
 4. Pin **Rayna Auto-Dialer** from the puzzle-piece menu
 
 ## 3. Log into your three tabs

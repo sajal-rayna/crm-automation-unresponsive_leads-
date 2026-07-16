@@ -11,20 +11,19 @@ mkdir -p dist
 ZIP="dist/rayna-autodialer-v${VERSION}.zip"
 rm -f "$ZIP"
 
-zip -q "$ZIP" \
-  manifest.json \
-  config.js \
-  learning.js \
-  background.js \
-  content-crm.js \
-  content-whatsapp.js \
-  content-gmail.js \
-  sidepanel.html \
-  sidepanel.js \
-  options.html \
-  options.js \
-  README.md \
-  TEAM-SETUP.md
+# Wrap everything in a single top-level folder so any unzip method (Windows
+# "Extract All" included) yields one clean "rayna-autodialer" folder whose
+# root directly contains manifest.json — the folder to pick in Load unpacked.
+STAGE="dist/rayna-autodialer"
+rm -rf "$STAGE"
+mkdir -p "$STAGE"
+cp manifest.json config.js learning.js background.js \
+  content-crm.js content-whatsapp.js content-gmail.js \
+  sidepanel.html sidepanel.js options.html options.js \
+  README.md TEAM-SETUP.md "$STAGE"/
+(cd dist && zip -qr "$(basename "$ZIP")" rayna-autodialer)
+rm -rf "$STAGE"
 
 echo "Built $ZIP"
-echo "Share it with the team along with TEAM-SETUP.md (also inside the zip)."
+echo "Teammates: extract, then Load unpacked -> select the 'rayna-autodialer' folder"
+echo "(the one that directly contains manifest.json)."
