@@ -80,6 +80,38 @@
     }
   }
 
+  // --- optional stored image (set on the options page) --------------------
+  async function getStoredImage() {
+    try {
+      const o = await chrome.storage.local.get('RAYNA_IMAGES');
+      return (o.RAYNA_IMAGES || {}).wa || null;
+    } catch (e) { return null; }
+  }
+
+  function dataUrlToFile(dataUrl, name) {
+    const [meta, b64] = dataUrl.split(',');
+    const mime = (meta.match(/data:([^;]+)/) || [])[1] || 'image/png';
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new File([bytes], name || 'image.png', { type: mime });
+  }
+
+  // Synthetic clipboard paste — identical to the user pressing Cmd+V with the
+  // image on the clipboard. WhatsApp opens its media PREVIEW (composer text
+  // becomes the caption); nothing is sent until the human presses Send.
+  async function pasteImageInto(el) {
+    const img = await getStoredImage();
+    if (!img) return null;
+    const dt = new DataTransfer();
+    dt.items.add(dataUrlToFile(img.dataUrl, img.name));
+    el.focus();
+    el.dispatchEvent(new ClipboardEvent('paste',
+      { clipboardData: dt, bubbles: true, cancelable: true }));
+    await sleep(1000);
+    return img;
+  }
+
   // Does this row's text verifiably belong to the lead?
   function rowMatchesLead(row, phoneDigits, leadName) {
     const text = `${row.getAttribute('aria-label') || ''} ${textOf(row)}`;
@@ -143,6 +175,11 @@
       return { ok: false, detail: 'this chat already has a drafted message — review it manually, nothing overwritten' };
     }
     insertText(composer, text);
+    try {
+      if (await pasteImageInto(composer)) {
+        return { ok: true, detail: 'message + image staged in the preview — press Send yourself' };
+      }
+    } catch (e) { /* image paste failed — text is still staged */ }
     return { ok: true, detail: 'message staged — attach the flyer and press Send yourself' };
   }
 
@@ -152,11 +189,28 @@
   let queue = Promise.resolve();
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (!msg || msg.type !== C.MSG.WA_FILL) return false;
-    queue = queue
-      .then(() => fillChat(msg.phone, msg.text, msg.leadName || ''))
-      .then(sendResponse)
-      .catch((e) => sendResponse({ ok: false, detail: String(e && e.message || e) }));
-    return true; // async response
+    if (!msg) return false;
+    if (msg.type === C.MSG.WA_FILL) {
+      queue = queue
+        .then(() => fillChat(msg.phone, msg.text, msg.leadName || ''))
+        .then(sendResponse)
+        .catch((e) => sendResponse({ ok: false, detail: String(e && e.message || e) }));
+      return true; // async response
+    }
+    if (msg.type === C.MSG.WA_ATTACH) {
+      // wa_link mode: the /send URL prefilled the text; once the composer is
+      // up, paste the stored image on top (text becomes the caption).
+      queue = queue.then(async () => {
+        const composer = await waitForAny(C.WA.COMPOSER, 30000);
+        if (!composer) return { ok: false, detail: 'composer not ready — attach the image manually' };
+        const img = await pasteImageInto(composer);
+        return img
+          ? { ok: true, detail: 'image staged in the preview — press Send yourself' }
+          : { ok: true, detail: 'no WhatsApp image configured' };
+      }).then(sendResponse)
+        .catch((e) => sendResponse({ ok: false, detail: String(e && e.message || e) }));
+      return true; // async response
+    }
+    return false;
   });
 })();

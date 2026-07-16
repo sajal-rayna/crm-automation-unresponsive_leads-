@@ -177,6 +177,58 @@
     await L.forgetAll();
     renderLearning();
   });
+  // --- pre-stage images ------------------------------------------------------
+  const IMG_KEY = 'RAYNA_IMAGES';
+  async function loadImages() {
+    const o = await chrome.storage.local.get(IMG_KEY);
+    return o[IMG_KEY] || {};
+  }
+
+  async function renderImages() {
+    const imgs = await loadImages();
+    for (const kind of ['wa', 'gmail']) {
+      const info = $(`img-${kind}-info`);
+      info.innerHTML = '';
+      const img = imgs[kind];
+      if (!img) { info.textContent = 'No image set.'; continue; }
+      const thumb = document.createElement('img');
+      thumb.src = img.dataUrl;
+      thumb.style.cssText = 'max-height:64px; border-radius:6px; vertical-align:middle; margin-right:10px;';
+      info.appendChild(thumb);
+      info.appendChild(document.createTextNode(
+        `${img.name} (~${Math.round(img.dataUrl.length * 3 / 4 / 1024)} KB) `));
+      info.appendChild(smallButton('Remove', async () => {
+        const cur = await loadImages();
+        delete cur[kind];
+        await chrome.storage.local.set({ [IMG_KEY]: cur });
+        renderImages();
+      }));
+    }
+  }
+
+  for (const kind of ['wa', 'gmail']) {
+    $(`img-${kind}`).addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (file.size > 2.5 * 1024 * 1024) {
+        flash('Image too large — keep it under 2.5 MB');
+        e.target.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const cur = await loadImages();
+        cur[kind] = { name: file.name, dataUrl: reader.result };
+        await chrome.storage.local.set({ [IMG_KEY]: cur });
+        e.target.value = '';
+        flash('Image saved');
+        renderImages();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  renderImages();
+
   // Live-refresh: a teaching saved while this page is open must appear
   // immediately — a stale render otherwise reads as "nothing was learned".
   try {

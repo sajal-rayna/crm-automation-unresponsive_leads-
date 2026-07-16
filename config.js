@@ -408,6 +408,8 @@ globalThis.RAYNA = (() => {
     GMAIL_PRESTAGE: 'RAYNA_GMAIL_PRESTAGE', // background -> Gmail content script
     STT_TRANSCRIBE: 'RAYNA_STT_TRANSCRIBE', // CRM -> background (local Whisper POST)
     CAMPAIGN_PROBE: 'RAYNA_CAMPAIGN_PROBE', // CRM -> background (MAIN-world state read)
+    WA_ATTACH: 'RAYNA_WA_ATTACH',           // background -> WhatsApp (paste stored image)
+    GMAIL_ATTACH: 'RAYNA_GMAIL_ATTACH',     // background -> Gmail (paste stored image)
   };
 
   // Panel/hotkey commands understood by the CRM engine

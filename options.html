@@ -96,9 +96,26 @@
     <textarea id="WA_IF_NOT_ANSWERED"></textarea>
   </label>
 
-  <label>Email body (compose mode; plain text — the image needs draft mode)
+  <label>Email body (compose mode; plain text)
     <textarea id="EMAIL_BODY" style="min-height:180px"></textarea>
   </label>
+
+  <h2 style="margin-top:32px">Pre-stage images</h2>
+  <div class="help">Optional; stored only in this browser (keep each under ~1 MB).
+    <b>WhatsApp:</b> the image is pasted into the chat after the message — WhatsApp shows
+    its media preview with your text as the caption; you still press Send.
+    <b>Gmail:</b> inserted inline into the compose body (compose mode — a draft carries
+    its own image). The paste is identical to you pressing Cmd+V; nothing is ever sent.</div>
+
+  <label>WhatsApp image (flyer)
+    <input type="file" id="img-wa" accept="image/*" />
+  </label>
+  <div class="help" id="img-wa-info"></div>
+
+  <label>Gmail image (event schedule)
+    <input type="file" id="img-gmail" accept="image/*" />
+  </label>
+  <div class="help" id="img-gmail-info"></div>
 
   <div class="row">
     <button id="save">Save</button>

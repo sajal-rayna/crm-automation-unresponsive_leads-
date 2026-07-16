@@ -111,8 +111,22 @@ async function prestageWhatsApp(lead, waText, settings) {
     // wa_link mode: let WhatsApp itself pre-fill the composer via a /send link.
     const url = C.WA.SEND_LINK(digits, waText);
     const existing = await findTab(C.WA.TAB_URL_PATTERN);
-    if (existing) await chrome.tabs.update(existing.id, { url });
-    else await chrome.tabs.create({ url, active: false });
+    let tabId;
+    if (existing) { await chrome.tabs.update(existing.id, { url }); tabId = existing.id; }
+    else { tabId = (await chrome.tabs.create({ url, active: false })).id; }
+    // If a WhatsApp image is configured, paste it once the chat loads.
+    const stored = await chrome.storage.local.get('RAYNA_IMAGES');
+    if (stored.RAYNA_IMAGES && stored.RAYNA_IMAGES.wa) {
+      try {
+        const r = await withTimeout(
+          sendToTab(tabId, { type: C.MSG.WA_ATTACH },
+            { retries: 15, delayMs: 2000, files: ['config.js', 'content-whatsapp.js'] }),
+          70000, 'WhatsApp image attach');
+        return { ok: true, detail: `wa.me link opened; ${(r && r.detail) || 'image attach attempted'}` };
+      } catch (e) {
+        return { ok: true, detail: 'wa.me link opened — image attach timed out, add it manually; press Send yourself' };
+      }
+    }
     return { ok: true, detail: 'wa.me link opened — review and press Send yourself' };
   }
 
@@ -145,7 +159,20 @@ async function prestageGmail(lead, settings) {
       '&to=' + encodeURIComponent(lead.email) +
       '&su=' + encodeURIComponent(settings.GMAIL_DRAFT_SUBJECT || '') +
       '&body=' + encodeURIComponent(body);
-    await chrome.tabs.create({ url, active: false });
+    const composeTab = await chrome.tabs.create({ url, active: false });
+    // If a Gmail image is configured, paste it into the compose body inline.
+    const stored = await chrome.storage.local.get('RAYNA_IMAGES');
+    if (stored.RAYNA_IMAGES && stored.RAYNA_IMAGES.gmail) {
+      try {
+        const r = await withTimeout(
+          sendToTab(composeTab.id, { type: C.MSG.GMAIL_ATTACH },
+            { retries: 10, delayMs: 1500, files: ['config.js', 'content-gmail.js'] }),
+          45000, 'Gmail image insert');
+        return { ok: true, detail: `compose opened; ${(r && r.detail) || 'image insert attempted'} — press Send yourself` };
+      } catch (e) {
+        return { ok: true, detail: 'compose opened — image insert timed out, add it manually; press Send yourself' };
+      }
+    }
     return { ok: true, detail: 'compose opened with To/subject/body — review and press Send yourself' };
   }
 

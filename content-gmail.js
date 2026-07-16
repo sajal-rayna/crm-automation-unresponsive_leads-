@@ -224,15 +224,63 @@
     }
   }
 
+  // --- optional stored image (set on the options page) --------------------
+  async function getStoredImage() {
+    try {
+      const o = await chrome.storage.local.get('RAYNA_IMAGES');
+      return (o.RAYNA_IMAGES || {}).gmail || null;
+    } catch (e) { return null; }
+  }
+
+  function dataUrlToFile(dataUrl, name) {
+    const [meta, b64] = dataUrl.split(',');
+    const mime = (meta.match(/data:([^;]+)/) || [])[1] || 'image/png';
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new File([bytes], name || 'image.png', { type: mime });
+  }
+
+  // Paste the stored image into the compose body (compose mode) — identical
+  // to the user pressing Cmd+V; Gmail uploads it inline. Never sends.
+  async function attachImage() {
+    const img = await getStoredImage();
+    if (!img) return { ok: true, detail: 'no Gmail image configured' };
+    const t0 = Date.now();
+    let body = null;
+    while (Date.now() - t0 < 20000 && !body) {
+      body = allVisible(C.GMAIL.BODY_FIELD)[0] || null;
+      if (!body) await sleep(400);
+    }
+    if (!body) return { ok: false, detail: 'compose body not found — insert the image manually' };
+    const dt = new DataTransfer();
+    dt.items.add(dataUrlToFile(img.dataUrl, img.name));
+    body.focus();
+    body.dispatchEvent(new ClipboardEvent('paste',
+      { clipboardData: dt, bubbles: true, cancelable: true }));
+    await sleep(1200);
+    return { ok: true, detail: 'image inserted into the compose body' };
+  }
+
   // Serialized so overlapping pre-stage requests can't edit the same compose.
   let queue = Promise.resolve();
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (!msg || msg.type !== C.MSG.GMAIL_PRESTAGE) return false;
-    queue = queue
-      .then(() => prestage(msg.email, msg.firstName, msg.subject))
-      .then(sendResponse)
-      .catch((e) => sendResponse({ ok: false, detail: String(e && e.message || e) }));
-    return true; // async response
+    if (!msg) return false;
+    if (msg.type === C.MSG.GMAIL_PRESTAGE) {
+      queue = queue
+        .then(() => prestage(msg.email, msg.firstName, msg.subject))
+        .then(sendResponse)
+        .catch((e) => sendResponse({ ok: false, detail: String(e && e.message || e) }));
+      return true; // async response
+    }
+    if (msg.type === C.MSG.GMAIL_ATTACH) {
+      queue = queue
+        .then(attachImage)
+        .then(sendResponse)
+        .catch((e) => sendResponse({ ok: false, detail: String(e && e.message || e) }));
+      return true; // async response
+    }
+    return false;
   });
 })();
