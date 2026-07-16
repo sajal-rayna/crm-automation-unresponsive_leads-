@@ -17,6 +17,8 @@
 (() => {
   const C = globalThis.RAYNA;
   if (!C) return;
+  if (globalThis.__RAYNA_GMAIL_LOADED__) return; // guard against re-injection
+  globalThis.__RAYNA_GMAIL_LOADED__ = true;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const isVisible = (el) => !!el && el.getClientRects().length > 0;

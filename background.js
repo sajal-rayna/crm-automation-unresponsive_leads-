@@ -11,6 +11,31 @@ const C = globalThis.RAYNA;
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
 // ---------------------------------------------------------------------------
+// Content-script self-healing. Tabs opened BEFORE the extension was installed
+// or reloaded never get manifest content scripts — the classic "Receiving end
+// does not exist" (users refresh the CRM tab but never their Gmail/WhatsApp
+// tabs). Inject into existing matching tabs on install/update, and again
+// on-demand when a message bounces.
+// ---------------------------------------------------------------------------
+const CONTENT_SCRIPT_SETS = [
+  { pattern: () => C.CRM.TAB_URL_PATTERN, files: ['config.js', 'learning.js', 'content-crm.js'] },
+  { pattern: () => C.WA.TAB_URL_PATTERN, files: ['config.js', 'content-whatsapp.js'] },
+  { pattern: () => C.GMAIL.TAB_URL_PATTERN, files: ['config.js', 'content-gmail.js'] },
+];
+
+chrome.runtime.onInstalled.addListener(async () => {
+  for (const set of CONTENT_SCRIPT_SETS) {
+    try {
+      const tabs = await chrome.tabs.query({ url: set.pattern() });
+      for (const tab of tabs) {
+        chrome.scripting.executeScript({ target: { tabId: tab.id }, files: set.files })
+          .catch(() => { /* chrome:// or discarded tab — ignore */ });
+      }
+    } catch (e) { /* pattern query failed — ignore */ }
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Tab lookup helpers
 // ---------------------------------------------------------------------------
 async function findCrmTab() {
@@ -24,14 +49,23 @@ async function findTab(pattern) {
   return tabs[0] || null;
 }
 
-// Send a message to a tab, retrying while its content script loads.
-async function sendToTab(tabId, msg, { retries = 6, delayMs = 1000 } = {}) {
+// Send a message to a tab, retrying while its content script loads. If the
+// tab has no listener at all (opened before the extension loaded), inject the
+// given content-script files once and keep retrying.
+async function sendToTab(tabId, msg, { retries = 6, delayMs = 1000, files = null } = {}) {
   let lastErr = null;
+  let injected = false;
   for (let i = 0; i < retries; i++) {
     try {
       return await chrome.tabs.sendMessage(tabId, msg);
     } catch (e) {
       lastErr = e;
+      if (!injected && files && /Receiving end does not exist/i.test(String(e))) {
+        injected = true;
+        try {
+          await chrome.scripting.executeScript({ target: { tabId }, files });
+        } catch (e2) { /* tab not injectable — keep retrying anyway */ }
+      }
       await new Promise((r) => setTimeout(r, delayMs));
     }
   }
@@ -45,7 +79,8 @@ async function sendToCrm(cmd) {
       `${C.CRM.HOST}${C.CRM.LEAD_PATH}… page and reload it.` };
   }
   try {
-    const res = await chrome.tabs.sendMessage(tab.id, { type: C.MSG.CRM_CMD, cmd });
+    const res = await sendToTab(tab.id, { type: C.MSG.CRM_CMD, cmd },
+      { retries: 2, delayMs: 500, files: ['config.js', 'learning.js', 'content-crm.js'] });
     return res || { ok: true };
   } catch (e) {
     return { ok: false, error: 'CRM page is not responding — reload the CRM tab.' };
@@ -92,7 +127,7 @@ async function prestageWhatsApp(lead, waText, settings) {
       phone: digits,
       text: waText,
       leadName: lead.name || '',
-    }),
+    }, { files: ['config.js', 'content-whatsapp.js'] }),
     75000, 'WhatsApp pre-stage');
   return res || { ok: false, detail: 'no response from WhatsApp tab' };
 }
@@ -112,7 +147,7 @@ async function prestageGmail(lead, settings) {
       email: lead.email,
       firstName: lead.firstName,
       subject: settings.GMAIL_DRAFT_SUBJECT,
-    }, { retries: 10, delayMs: 1500 }),
+    }, { retries: 10, delayMs: 1500, files: ['config.js', 'content-gmail.js'] }),
     90000, 'Gmail pre-stage');
   return res || { ok: false, detail: 'no response from Gmail tab' };
 }

@@ -16,6 +16,10 @@
   const C = globalThis.RAYNA;
   const L = globalThis.RAYNA_LEARN;
   if (!C || !L) return;
+  // The background can re-inject into an already-scripted tab (self-healing
+  // after extension reloads) — never initialize twice.
+  if (globalThis.__RAYNA_CRM_LOADED__) return;
+  globalThis.__RAYNA_CRM_LOADED__ = true;
 
   // ---------------------------------------------------------------------------
   // Session state
@@ -155,6 +159,15 @@
       teach.descs.push(L.describeElement(el));
       if (teach.descs.length > 10) teach.descs.shift();
       pushLog('info', `Learning candidate for "${key}": "${(textOf(el) || el.tagName).slice(0, 40)}"`);
+      // Persist IMMEDIATELY — a tab refresh during the pause must not lose the
+      // teaching. Simple keys keep the first click; option-style keys save
+      // every click, so the newest (tried first on locate) is the last one.
+      const optionKey = key.startsWith('reason-option:') || key.startsWith('interest-chip:');
+      if (optionKey || teach.descs.length === 1) {
+        L.recordSelector(key, teach.descs[teach.descs.length - 1])
+          .then(async () => { S.learned = await L.load(); })
+          .catch(() => {});
+      }
     };
     document.addEventListener('click', teach.handler, true);
   }
@@ -171,9 +184,10 @@
     const { key, descs } = teach;
     teach = null;
     if (!save || !descs.length || !learningOn()) return;
-    // Dropdown options: the LAST click before Resume is the option itself
-    // (earlier clicks reopened the dropdown). Everything else: the first click.
-    const desc = key.startsWith('reason-option:') ? descs[descs.length - 1] : descs[0];
+    // Dropdown/chip options: the LAST click before Resume is the option itself
+    // (earlier clicks reopened the control). Everything else: the first click.
+    const optionKey = key.startsWith('reason-option:') || key.startsWith('interest-chip:');
+    const desc = optionKey ? descs[descs.length - 1] : descs[0];
     await L.recordSelector(key, desc);
     S.learned = await L.load();
     pushLog('ok',
