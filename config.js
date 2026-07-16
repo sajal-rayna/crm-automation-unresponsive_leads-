@@ -306,6 +306,15 @@ globalThis.RAYNA = (() => {
       "to that before the 25th?",
   };
 
+  // The scripts/templates above are the DEFAULTS; each user can override them
+  // from the options page (stored per-browser in chrome.storage). An empty
+  // options field falls back to these defaults.
+  Object.assign(DEFAULT_SETTINGS, {
+    SCRIPT_CALL: TEMPLATES.CALL_SCRIPT,
+    WA_IF_INTERESTED: TEMPLATES.IF_INTERESTED,
+    WA_IF_NOT_ANSWERED: TEMPLATES.IF_NOT_ANSWERED,
+  });
+
   // Fill [Client Name]/[FirstName]-style tokens in a template.
   function fillTemplate(template, firstName) {
     return template.replace(/\[(Client\s*Name|First\s*Name|FirstName)\]/gi, firstName || 'there');

@@ -65,6 +65,21 @@ The same applies to an **error pause** (red box): do the surfaced action manuall
 make sure the outcome is saved, and click **Next** if that lead is finished —
 *then* press Resume. Resuming with the same lead still on screen dials it again.
 
+## Team distribution
+
+Run `./package.sh` to build `dist/rayna-autodialer-v<version>.zip` and share it;
+each teammate follows **TEAM-SETUP.md** (unzip → load unpacked → log into their
+own CRM/WhatsApp/Gmail → personalize the Scripts & templates section in options
+with their own name → copy the RSVP draft into their own Gmail). Everything —
+settings, templates, learned selector fixes, stats — is per-browser, so
+teammates don't affect each other.
+
+For a larger rollout, the polished path is publishing to the Chrome Web Store
+as **unlisted** (teammates install from a private link, and updates ship
+automatically instead of everyone re-pulling) — requires a one-time $5
+developer registration and a review pass. With Google Workspace, an admin can
+also force-install the extension org-wide via policy.
+
 ## Configuration (options page)
 
 | Setting | Default | Meaning |

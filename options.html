@@ -11,10 +11,11 @@
     h1 { font-size: 18px; }
     label { display: block; font-weight: 600; margin-top: 16px; }
     .help { color: #667; font-weight: 400; font-size: 12.5px; margin-top: 2px; }
-    input[type="number"], input[type="text"], select {
+    input[type="number"], input[type="text"], select, textarea {
       width: 100%; padding: 7px 9px; margin-top: 5px; border: 1px solid #c6ccd8;
       border-radius: 6px; font: inherit; box-sizing: border-box;
     }
+    textarea { min-height: 130px; resize: vertical; line-height: 1.45; }
     .check { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-top: 16px; }
     .row { display: flex; gap: 10px; margin-top: 22px; }
     button {
@@ -63,6 +64,25 @@
   <label>Gmail draft subject
     <div class="help">The draft the Pre-stage step searches for and opens (never sends).</div>
     <input type="text" id="GMAIL_DRAFT_SUBJECT" />
+  </label>
+
+  <h2 style="margin-top:32px">Scripts &amp; message templates</h2>
+  <div class="help">Personal to this browser — each team member sets their own (put YOUR
+    name in the WhatsApp intro). <b>[Client Name]</b> is replaced with the lead's first
+    name. Clearing a box restores the built-in default on Save. The Gmail <i>body</i> is
+    not here by design: it lives in your Gmail draft (set its subject above) so it keeps
+    rich formatting and images — the tool only fills To and the [Client Name] salutation.</div>
+
+  <label>Call-opening script (shown during Live / Pre-stage freeze)
+    <textarea id="SCRIPT_CALL"></textarea>
+  </label>
+
+  <label>WhatsApp — "If Interested" (staged by Pre-stage; never sent)
+    <textarea id="WA_IF_INTERESTED"></textarea>
+  </label>
+
+  <label>WhatsApp — "If Not Answered" (staged on voicemail/no-answer if enabled; never sent)
+    <textarea id="WA_IF_NOT_ANSWERED"></textarea>
   </label>
 
   <div class="row">

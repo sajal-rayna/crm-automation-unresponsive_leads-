@@ -688,7 +688,7 @@
       errorMessage: S.errorMessage,
       callElapsedMs: S.connectedAt ? Date.now() - S.connectedAt
         : S.callStartedAt ? Date.now() - S.callStartedAt : 0,
-      callScript: C.TEMPLATES.CALL_SCRIPT,
+      callScript: (S.settings && S.settings.SCRIPT_CALL) || C.TEMPLATES.CALL_SCRIPT,
       listen: {
         active: S.listen.active,
         suggestion: S.listen.suggestion,
@@ -1131,7 +1131,8 @@
         type: C.MSG.PRESTAGE,
         channels: ['wa', 'gmail'],
         lead,
-        waText: C.fillTemplate(C.TEMPLATES.IF_INTERESTED, lead.firstName),
+        waText: C.fillTemplate(
+          S.settings.WA_IF_INTERESTED || C.TEMPLATES.IF_INTERESTED, lead.firstName),
         settings: S.settings,
       });
     } catch (e) {
@@ -1153,7 +1154,8 @@
         type: C.MSG.PRESTAGE,
         channels: ['wa'],
         lead,
-        waText: C.fillTemplate(C.TEMPLATES.IF_NOT_ANSWERED, lead.firstName),
+        waText: C.fillTemplate(
+          S.settings.WA_IF_NOT_ANSWERED || C.TEMPLATES.IF_NOT_ANSWERED, lead.firstName),
         settings: S.settings,
       }).then((res) => {
         const r = res && res.wa;
