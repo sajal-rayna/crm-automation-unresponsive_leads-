@@ -91,13 +91,15 @@
 
     els.start.disabled = st.running;
     els.stop.disabled = !st.running;
-    for (const b of [els.voicemail, els.live, els.skip, els.notInterested]) {
+    for (const b of [els.voicemail, els.live, els.skip]) {
       b.disabled = !st.decisionNeeded;
     }
-    // Pre-stage also works DURING a live/prestage freeze (an interested turn
-    // can come after the Live decision).
-    els.prestage.disabled = !(st.decisionNeeded ||
-      (st.frozen && (st.freezeReason === 'live' || st.freezeReason === 'prestage')));
+    // Pre-stage and Not interested also work DURING a live/prestage freeze —
+    // the conversation can turn either way after the Live decision.
+    const inCallFreeze =
+      st.frozen && (st.freezeReason === 'live' || st.freezeReason === 'prestage');
+    els.prestage.disabled = !(st.decisionNeeded || inCallFreeze);
+    els.notInterested.disabled = !(st.decisionNeeded || inCallFreeze);
 
     const frozen = st.frozen;
     els.freezeBox.style.display = frozen ? 'block' : 'none';

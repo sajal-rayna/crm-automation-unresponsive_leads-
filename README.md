@@ -18,8 +18,10 @@ human-judgment step and every "Send" action manual.
   - **Voicemail** -> hangs up, logs **No Answer** (operator preference, matching the
     CRM's own call status; set `CRM.VOICEMAIL_LOG_REASON` in config.js to
     `REASONS.VOICEMAIL` for "Left Voicemail"), advances.
-  - **Live** -> freezes so you can run the interested branch by hand. **Pre-stage stays
-    available during the freeze** — press it when the conversation turns interested.
+  - **Live** -> freezes so you can run the interested branch by hand. **Pre-stage and
+    Not interested stay available during the freeze** — stage drafts if the conversation
+    turns interested, or log Not Interested and continue dialing if it turns out a no
+    (no Resume needed).
   - **Pre-stage** -> fills the WhatsApp "If Interested" message + opens the Gmail RSVP draft (never sends), then freezes.
   - **Not interested** -> hangs up, sets the toggle to **Connected**, logs
     **Not Interested**, saves, advances.

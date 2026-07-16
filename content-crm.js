@@ -741,6 +741,9 @@
       .finally(() => { pendingResume = null; });
   }
 
+  // Returns the value the freeze was resolved with: undefined for a plain
+  // Resume/Stop, or an action string (e.g. 'notinterested') when the operator
+  // exits the freeze through a decision button instead.
   async function freeze(reason, message) {
     S.frozen = true;
     S.freezeReason = reason;
@@ -748,11 +751,12 @@
     setPhase(reason === 'error' ? 'paused_error' : `frozen_${reason}`, message || '');
     pushLog(reason === 'error' ? 'error' : 'info',
       reason === 'error' ? message : `Frozen (${reason}) — press Resume when done`);
-    await awaitResume();
+    const result = await awaitResume();
     S.frozen = false;
     S.freezeReason = null;
     S.errorMessage = null;
-    pushLog('info', 'Resumed');
+    pushLog('info', result ? `Resumed via "${result}"` : 'Resumed');
+    return result;
   }
 
   // ---------------------------------------------------------------------------
@@ -1251,26 +1255,28 @@
         await advance();
       } else if (decision === 'notinterested') {
         stopListening();
-        await endCall();
-        await logOutcome(C.REASONS.NOT_INTERESTED, { connected: true });
-        S.tally.notInterested += 1;
-        await advance();
+        await logNotInterested();
       } else if (decision === 'live') {
         S.tally.live += 1;
         // Freeze with the call still up — the human runs the interested branch
         // (warmth, RSVP, sends, calendar, Save Outcome, Next) entirely by hand.
         // Keep listening through the freeze: the RSVP phrases happen here.
-        await freeze('live',
-          'LIVE call — handle it manually. When done (Save Outcome + Next), press Resume.');
-        recordListenOutcome('live_resumed');
+        // Not interested / Pre-stage stay available during the freeze.
+        const after = await freeze('live',
+          'LIVE call — handle it manually. When done (Save Outcome + Next), press ' +
+          'Resume — or press Not interested to log & continue, or Pre-stage to stage drafts.');
+        recordListenOutcome(after === 'notinterested' ? 'live_notinterested' : 'live_resumed');
         stopListening();
+        if (after === 'notinterested') await logNotInterested();
       } else if (decision === 'prestage') {
         await doPrestage(lead);
         S.tally.prestaged += 1;
-        await freeze('prestage',
-          'Drafts staged (nothing sent). Finish the lead manually (Save Outcome + Next), then press Resume.');
-        recordListenOutcome('prestage_resumed');
+        const after = await freeze('prestage',
+          'Drafts staged (nothing sent). Finish the lead manually (Save Outcome + Next), ' +
+          'then press Resume — or press Not interested to log & continue.');
+        recordListenOutcome(after === 'notinterested' ? 'prestage_notinterested' : 'prestage_resumed');
         stopListening();
+        if (after === 'notinterested') await logNotInterested();
       } else { // skip
         stopListening();
         await endCall();
@@ -1298,6 +1304,16 @@
     if (reason === C.REASONS.NO_ANSWER) prestageMissWhatsApp(lead);
     await logOutcome(reason);
     bumpReasonTally(reason);
+    await advance();
+  }
+
+  // Shared Not-interested exit: hang up if needed, log Connected +
+  // Not Interested, save, advance. Used from the decision prompt and from
+  // inside a live/prestage freeze.
+  async function logNotInterested() {
+    await endCall();
+    await logOutcome(C.REASONS.NOT_INTERESTED, { connected: true });
+    S.tally.notInterested += 1;
     await advance();
   }
 
@@ -1410,6 +1426,15 @@
   function handleDecision(action) {
     if (pendingDecision) {
       pendingDecision.resolve(action);
+      return;
+    }
+    // A live conversation can also turn out to be a NO after the Live
+    // decision: Not interested during a live/prestage freeze resolves the
+    // freeze with that action — the engine logs Connected + Not Interested,
+    // saves, advances and keeps dialing (no Resume needed).
+    if (S.frozen && action === 'notinterested' && pendingResume &&
+        (S.freezeReason === 'live' || S.freezeReason === 'prestage')) {
+      pendingResume.resolve('notinterested');
       return;
     }
     // A live conversation can turn interested AFTER the Live decision was
