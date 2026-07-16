@@ -52,7 +52,19 @@
     if (C.FORBIDDEN_CLICK_RE.test(label.trim())) {
       throw new Error(`SAFETY: refused to click "${label.trim()}" while ${why}`);
     }
-    el.click();
+    // WhatsApp's chat rows react to real mouse-down/up sequences, not a bare
+    // synthetic .click() — dispatch the full pointer sequence at the center.
+    const r = el.getBoundingClientRect();
+    const opts = {
+      bubbles: true, cancelable: true, view: window,
+      clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+    };
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      try {
+        el.dispatchEvent(type.startsWith('pointer')
+          ? new PointerEvent(type, opts) : new MouseEvent(type, opts));
+      } catch (e) { /* PointerEvent unavailable — mouse events suffice */ }
+    }
   }
 
   function insertText(el, text) {
