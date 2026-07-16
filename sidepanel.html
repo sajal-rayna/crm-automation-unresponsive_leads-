@@ -50,6 +50,7 @@
     #btn-voicemail { border-color: #4a5a86; }
     #btn-live { background: #123a26; border-color: #2c6a48; }
     #btn-prestage { background: #241f42; border-color: #443a72; }
+    #btn-notinterested { background: #3a2020; border-color: #5a3030; }
     #freeze-box { display: none; border-color: var(--violet); }
     #freeze-box.error { border-color: var(--err); }
     #freeze-msg { white-space: pre-wrap; }
@@ -101,6 +102,7 @@
       <button id="btn-live" disabled>Live<span class="hint">Alt+Shift+L</span></button>
       <button id="btn-prestage" disabled>Pre-stage<span class="hint">Alt+Shift+P</span></button>
       <button id="btn-skip" disabled>Skip<span class="hint">Alt+Shift+S</span></button>
+      <button id="btn-notinterested" disabled>Not interested<span class="hint">logs + advances</span></button>
     </div>
   </div>
 
@@ -126,6 +128,8 @@
           <td>Live</td><td class="n" id="t-live">0</td></tr>
       <tr><td>Pre-staged</td><td class="n" id="t-prestaged">0</td>
           <td>Skipped</td><td class="n" id="t-skipped">0</td></tr>
+      <tr><td>Not interested</td><td class="n" id="t-notInterested">0</td>
+          <td>Errors</td><td class="n" id="t-errors">0</td></tr>
     </table>
   </div>
 

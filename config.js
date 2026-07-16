@@ -44,6 +44,9 @@ globalThis.RAYNA = (() => {
     TECH_FAILURE: 'Technical Failure',
     WRONG_NUMBER: 'Wrong Number',
     INVALID: 'Invalid / Not in Service',
+    // Connected-call outcome (Not Interested button). If the CRM's dropdown
+    // labels it differently, fix here — or let teach-on-pause learn the option.
+    NOT_INTERESTED: 'Not Interested',
   };
 
   // Failure-toast text -> Reason. First match wins; order the specific ones first.
@@ -159,6 +162,11 @@ globalThis.RAYNA = (() => {
 
     // Log Call Outcome panel
     NOT_CONNECTED_TEXT: /^Not Connected$/i,   // the toggle option we ensure is set
+    CONNECTED_TEXT: /^Connected$/i,           // toggle option for Not Interested logging
+    // What the Voicemail button logs. Operator preference: voicemail answers
+    // count as No Answer in this CRM's reporting (matching its own call
+    // status). Set to REASONS.VOICEMAIL ('Left Voicemail') for spec behavior.
+    VOICEMAIL_LOG_REASON: REASONS.NO_ANSWER,
     REASON_TRIGGER_TEXT: /Select reason/i,    // the dropdown trigger placeholder
     SAVE_OUTCOME_TEXT: /^Save Outcome$/i,
     NEXT_BUTTON_TEXT: /^Next\b/i,
@@ -385,6 +393,7 @@ globalThis.RAYNA = (() => {
     LIVE: 'action:live',
     PRESTAGE: 'action:prestage',
     SKIP: 'action:skip',
+    NOT_INTERESTED: 'action:notinterested',
   };
 
   // Merge stored overrides over defaults.

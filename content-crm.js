@@ -48,7 +48,8 @@
   function newTally() {
     return {
       dialed: 0, noAnswer: 0, busy: 0, voicemail: 0, dropped: 0,
-      techFailure: 0, invalid: 0, live: 0, prestaged: 0, skipped: 0, errors: 0,
+      techFailure: 0, invalid: 0, live: 0, prestaged: 0, skipped: 0,
+      notInterested: 0, errors: 0,
     };
   }
 
@@ -842,17 +843,24 @@
     }
   }
 
-  // Log a non-connected outcome. Touches ONLY: Not Connected, Reason, Save Outcome.
-  async function logOutcome(reason) {
+  // Log an outcome. Touches ONLY: the "Did you connect?" toggle, the Reason
+  // dropdown, and Save Outcome. opts.connected = true sets the toggle to
+  // Connected instead of Not Connected (Not Interested logging — the human
+  // made the judgment by pressing the button; the tool just executes it).
+  async function logOutcome(reason, opts = {}) {
+    const connected = !!opts.connected;
     setPhase('logging', reason);
 
-    // 1. Ensure the "Did you connect?" toggle is on Not Connected.
-    await act('set the "Did you connect?" toggle to Not Connected', async () => {
+    // 1. Ensure the "Did you connect?" toggle is on the right side.
+    const toggleLabel = connected ? 'Connected' : 'Not Connected';
+    const toggleRe = connected ? C.CRM.CONNECTED_TEXT : C.CRM.NOT_CONNECTED_TEXT;
+    const toggleKey = connected ? 'connected-toggle' : 'not-connected';
+    await act(`set the "Did you connect?" toggle to ${toggleLabel}`, async () => {
       const el = await waitFor(
-        () => findByExactText(C.CRM.NOT_CONNECTED_TEXT) || learnedEl('not-connected'), 4000);
-      if (!el) throw new Error('"Not Connected" option not found');
+        () => findByExactText(toggleRe) || learnedEl(toggleKey), 4000);
+      if (!el) throw new Error(`"${toggleLabel}" option not found`);
       if (!looksSelected(el)) clickable(el).click();
-    }, 'not-connected');
+    }, toggleKey);
 
     // 2. Reason dropdown.
     // *** BRITTLE #1: this is a custom React dropdown whose options only render
@@ -1236,8 +1244,16 @@
         stopListening();
         await endCall();
         prestageMissWhatsApp(lead);
-        await logOutcome(C.REASONS.VOICEMAIL);
+        // Logs No Answer by default (operator preference, matching the CRM's
+        // own call status) — see CRM.VOICEMAIL_LOG_REASON in config.js.
+        await logOutcome(C.CRM.VOICEMAIL_LOG_REASON);
         S.tally.voicemail += 1;
+        await advance();
+      } else if (decision === 'notinterested') {
+        stopListening();
+        await endCall();
+        await logOutcome(C.REASONS.NOT_INTERESTED, { connected: true });
+        S.tally.notInterested += 1;
         await advance();
       } else if (decision === 'live') {
         S.tally.live += 1;
@@ -1394,9 +1410,24 @@
   function handleDecision(action) {
     if (pendingDecision) {
       pendingDecision.resolve(action);
-    } else {
-      pushLog('warn', `Ignored "${action}" — no connected call is awaiting a decision`);
+      return;
     }
+    // A live conversation can turn interested AFTER the Live decision was
+    // made: allow Pre-stage during a live/prestage freeze without unfreezing —
+    // the drafts get staged and the operator stays in control of the call.
+    if (S.frozen && action === 'prestage' &&
+        (S.freezeReason === 'live' || S.freezeReason === 'prestage')) {
+      const freezeReason = S.freezeReason;
+      const freezeMsg = S.phaseDetail;
+      doPrestage(S.lead).then(() => {
+        S.tally.prestaged += 1;
+        setPhase(`frozen_${freezeReason}`, freezeMsg);
+      }).catch(() => {
+        setPhase(`frozen_${freezeReason}`, freezeMsg);
+      });
+      return;
+    }
+    pushLog('warn', `Ignored "${action}" — no connected call is awaiting a decision`);
   }
 
   function handleResume() {

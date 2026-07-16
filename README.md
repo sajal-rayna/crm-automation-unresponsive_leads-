@@ -15,9 +15,14 @@ human-judgment step and every "Send" action manual.
 - If the call stays "Ringing" past the ring timeout, it hangs up and logs **No Answer**.
 - On a failure toast it logs the matching Reason (Busy / Call Dropped / Technical Failure / Invalid–Not in Service).
 - When a call **connects**, it stops and asks you (button or hotkey):
-  - **Voicemail** -> hangs up, logs **Left Voicemail**, advances.
-  - **Live** -> freezes so you can run the interested branch by hand.
+  - **Voicemail** -> hangs up, logs **No Answer** (operator preference, matching the
+    CRM's own call status; set `CRM.VOICEMAIL_LOG_REASON` in config.js to
+    `REASONS.VOICEMAIL` for "Left Voicemail"), advances.
+  - **Live** -> freezes so you can run the interested branch by hand. **Pre-stage stays
+    available during the freeze** — press it when the conversation turns interested.
   - **Pre-stage** -> fills the WhatsApp "If Interested" message + opens the Gmail RSVP draft (never sends), then freezes.
+  - **Not interested** -> hangs up, sets the toggle to **Connected**, logs
+    **Not Interested**, saves, advances.
   - **Skip** -> hangs up and advances without logging.
 - Advances to the next lead and repeats.
 

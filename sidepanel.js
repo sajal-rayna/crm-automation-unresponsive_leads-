@@ -14,6 +14,7 @@
     start: $('btn-start'), stop: $('btn-stop'),
     voicemail: $('btn-voicemail'), live: $('btn-live'),
     prestage: $('btn-prestage'), skip: $('btn-skip'),
+    notInterested: $('btn-notinterested'),
     freezeBox: $('freeze-box'), freezeMsg: $('freeze-msg'),
     callScript: $('call-script'), resume: $('btn-resume'),
     log: $('log'), listenLine: $('listen-line'),
@@ -90,9 +91,13 @@
 
     els.start.disabled = st.running;
     els.stop.disabled = !st.running;
-    for (const b of [els.voicemail, els.live, els.prestage, els.skip]) {
+    for (const b of [els.voicemail, els.live, els.skip, els.notInterested]) {
       b.disabled = !st.decisionNeeded;
     }
+    // Pre-stage also works DURING a live/prestage freeze (an interested turn
+    // can come after the Live decision).
+    els.prestage.disabled = !(st.decisionNeeded ||
+      (st.frozen && (st.freezeReason === 'live' || st.freezeReason === 'prestage')));
 
     const frozen = st.frozen;
     els.freezeBox.style.display = frozen ? 'block' : 'none';
@@ -104,7 +109,8 @@
     }
 
     for (const k of ['dialed', 'noAnswer', 'voicemail', 'busy', 'dropped',
-      'techFailure', 'invalid', 'live', 'prestaged', 'skipped']) {
+      'techFailure', 'invalid', 'live', 'prestaged', 'skipped',
+      'notInterested', 'errors']) {
       const el = $(`t-${k}`);
       if (el) el.textContent = (st.tally && st.tally[k]) || 0;
     }
@@ -138,6 +144,7 @@
   els.live.addEventListener('click', () => sendCmd(C.CMD.LIVE));
   els.prestage.addEventListener('click', () => sendCmd(C.CMD.PRESTAGE));
   els.skip.addEventListener('click', () => sendCmd(C.CMD.SKIP));
+  els.notInterested.addEventListener('click', () => sendCmd(C.CMD.NOT_INTERESTED));
   els.resume.addEventListener('click', () => sendCmd(C.CMD.RESUME));
   $('open-options').addEventListener('click', (e) => {
     e.preventDefault();

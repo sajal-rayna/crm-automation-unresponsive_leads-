@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Rayna Auto-Dialer",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "Automates the repetitive parts of the Rayna CRM outbound-calling workflow. Personal load-unpacked tool: never logs in, never sends messages or emails.",
   "minimum_chrome_version": "114",
   "permissions": ["scripting", "storage", "sidePanel", "tabs"],
@@ -55,6 +55,9 @@
     "skip-lead": {
       "suggested_key": { "default": "Alt+Shift+S" },
       "description": "Connected call: hang up and advance without logging"
+    },
+    "mark-not-interested": {
+      "description": "Connected call: not interested (log Not Interested, save, next)"
     },
     "resume-session": {
       "description": "Resume dialing after a Live / Pre-stage / error freeze"

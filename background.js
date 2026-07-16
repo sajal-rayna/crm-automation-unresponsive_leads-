@@ -310,6 +310,7 @@ const COMMAND_MAP = {
   'mark-live': C.CMD.LIVE,
   'prestage': C.CMD.PRESTAGE,
   'skip-lead': C.CMD.SKIP,
+  'mark-not-interested': C.CMD.NOT_INTERESTED,
   'resume-session': C.CMD.RESUME,
   'quit-session': C.CMD.QUIT,
 };
