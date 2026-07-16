@@ -177,5 +177,12 @@
     await L.forgetAll();
     renderLearning();
   });
+  // Live-refresh: a teaching saved while this page is open must appear
+  // immediately — a stale render otherwise reads as "nothing was learned".
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes[L.STORAGE_KEY]) renderLearning();
+    });
+  } catch (e) { /* n/a */ }
   renderLearning();
 })();

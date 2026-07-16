@@ -23,9 +23,10 @@ In the same Chrome profile, log into:
 
 - the CRM: `crm.rayna-properties.com`
 - WhatsApp Web: `web.whatsapp.com`
-- Gmail: `mail.google.com` — **and make sure the RSVP draft exists in YOUR
-  Drafts** with the exact subject configured in options (ask the team lead to
-  share the draft template; copy it into your own Gmail as a draft).
+- Gmail: `mail.google.com`. By default (Gmail mode = **compose**) no draft is
+  needed — Pre-stage opens a fresh compose with To/subject/body pre-filled.
+  Only if you switch to **draft** mode (rich formatting + the schedule image)
+  do you need the RSVP draft copied into your own Gmail Drafts.
 
 ## 4. Personalize your options (right-click the icon → Options)
 

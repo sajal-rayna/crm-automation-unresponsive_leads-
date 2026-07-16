@@ -90,7 +90,8 @@ also force-install the extension org-wide via policy.
 | MAX_LEADS | 0 | Session cap (0 = unlimited) |
 | PREFILL_WHATSAPP_ON_MISS | false | Pre-fill the "If Not Answered" WhatsApp on voicemail/no-answer |
 | WHATSAPP_MODE | existing_tab | existing_tab (fill your open WhatsApp Web tab) or wa_link (open a /send link) |
-| GMAIL_DRAFT_SUBJECT | RSVP Confirmed: First time ever meet the TOP Developers of Dubai Virtually | Draft the pre-stage step opens |
+| GMAIL_MODE | compose | compose (fresh pre-filled compose, no draft needed) or draft (open the pre-made RSVP draft — rich formatting + image) |
+| GMAIL_DRAFT_SUBJECT | RSVP Confirmed: First time ever meet the TOP Developers of Dubai Virtually | Email subject (and, in draft mode, how the draft is found) |
 
 Hotkeys — Voicemail `Alt+Shift+V`, Live `Alt+Shift+L`, Pre-stage `Alt+Shift+P`,
 Skip `Alt+Shift+S` (Resume and Quit have no default) — are configurable at

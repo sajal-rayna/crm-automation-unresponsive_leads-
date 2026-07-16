@@ -44,11 +44,20 @@ globalThis.RAYNA_LEARN = (() => {
     }
   }
 
-  async function mutate(fn) {
-    const data = await load();
-    fn(data);
-    try { await chrome.storage.local.set({ [STORAGE_KEY]: data }); } catch (e) { /* best effort */ }
-    return data;
+  // All writes go through one serial queue: concurrent read-modify-write
+  // cycles (a teach save landing while ring stats record) must never clobber
+  // each other. Write errors PROPAGATE — callers decide whether to surface
+  // them; a failed save must never look like a success.
+  let writeQueue = Promise.resolve();
+  function mutate(fn) {
+    const task = writeQueue.then(async () => {
+      const data = await load();
+      fn(data);
+      await chrome.storage.local.set({ [STORAGE_KEY]: data });
+      return data;
+    });
+    writeQueue = task.catch(() => {}); // a failed write must not jam the queue
+    return task;
   }
 
   // ---------------------------------------------------------------------------

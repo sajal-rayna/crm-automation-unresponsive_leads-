@@ -61,8 +61,19 @@
     </select>
   </label>
 
-  <label>Gmail draft subject
-    <div class="help">The draft the Pre-stage step searches for and opens (never sends).</div>
+  <label>Gmail mode
+    <div class="help"><b>compose</b>: Pre-stage opens a fresh compose with To/subject/body
+      pre-filled — no draft needed, survives login, plain text (no image).
+      <b>draft</b>: opens your pre-made RSVP draft by subject — keeps rich formatting and
+      the schedule image, but the draft must exist in YOUR Gmail.</div>
+    <select id="GMAIL_MODE">
+      <option value="compose">compose (no draft needed)</option>
+      <option value="draft">draft (rich formatting + image)</option>
+    </select>
+  </label>
+
+  <label>Email subject
+    <div class="help">Used as the compose subject — and, in draft mode, to find the draft.</div>
     <input type="text" id="GMAIL_DRAFT_SUBJECT" />
   </label>
 
@@ -83,6 +94,10 @@
 
   <label>WhatsApp — "If Not Answered" (staged on voicemail/no-answer if enabled; never sent)
     <textarea id="WA_IF_NOT_ANSWERED"></textarea>
+  </label>
+
+  <label>Email body (compose mode; plain text — the image needs draft mode)
+    <textarea id="EMAIL_BODY" style="min-height:180px"></textarea>
   </label>
 
   <div class="row">

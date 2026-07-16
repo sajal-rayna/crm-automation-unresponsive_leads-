@@ -17,6 +17,13 @@ globalThis.RAYNA = (() => {
     MAX_LEADS: 0,                  // session cap, 0 = unlimited
     PREFILL_WHATSAPP_ON_MISS: false, // pre-fill "If Not Answered" WhatsApp on voicemail/no-answer
     WHATSAPP_MODE: 'existing_tab', // 'existing_tab' | 'wa_link'
+    // 'compose': open a fresh Gmail compose with To/Subject/Body pre-filled
+    //   via URL — needs no draft, no Gmail scripting, and survives a login
+    //   redirect (the content rides in the URL). Plain text only.
+    // 'draft': find + open the pre-made RSVP draft by subject (keeps rich
+    //   formatting and the schedule image; each user needs the draft in
+    //   their own Gmail).
+    GMAIL_MODE: 'compose',
     GMAIL_DRAFT_SUBJECT:
       "RSVP Confirmed: First time ever meet the TOP Developers of Dubai Virtually",
 
@@ -306,6 +313,26 @@ globalThis.RAYNA = (() => {
       "to that before the 25th?",
   };
 
+  // Plain-text email body for GMAIL_MODE 'compose' (the rich version with the
+  // schedule image lives in the Gmail draft, for 'draft' mode).
+  TEMPLATES.EMAIL_BODY =
+    "Dear [Client Name],\n\n" +
+    "Thank you for confirming your RSVP for the Dubai Real Estate Virtual " +
+    "Roadshow on Saturday, July 25, 2026, from 11:00 AM – 4:30 PM CST.\n\n" +
+    "What to Expect:\n" +
+    "• 7 Top Developers: Live presentations from Emaar, Nakheel, DAMAC, " +
+    "Binghatti, Sobha Realty, Danube, and Mantra.\n" +
+    "• Exclusive Inventory: Access to off-market project pre-launches and " +
+    "first-tier pricing.\n" +
+    "• International Offers: Specially curated interest-free payment plans " +
+    "and high-yield investment blueprints.\n\n" +
+    "Next Steps:\n" +
+    "1. Accept the Calendar Invite: Please accept the digital calendar " +
+    "invitation sent to your email to lock this event into your schedule.\n" +
+    "2. Access Credentials: Your unique secure streaming link and personal " +
+    "passcode will be emailed to you 24 to 48 hours before the event.\n\n" +
+    "We look forward to hosting you.";
+
   // The scripts/templates above are the DEFAULTS; each user can override them
   // from the options page (stored per-browser in chrome.storage). An empty
   // options field falls back to these defaults.
@@ -313,6 +340,7 @@ globalThis.RAYNA = (() => {
     SCRIPT_CALL: TEMPLATES.CALL_SCRIPT,
     WA_IF_INTERESTED: TEMPLATES.IF_INTERESTED,
     WA_IF_NOT_ANSWERED: TEMPLATES.IF_NOT_ANSWERED,
+    EMAIL_BODY: TEMPLATES.EMAIL_BODY,
   });
 
   // Fill [Client Name]/[FirstName]-style tokens in a template.

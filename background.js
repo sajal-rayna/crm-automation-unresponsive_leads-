@@ -134,6 +134,22 @@ async function prestageWhatsApp(lead, waText, settings) {
 
 async function prestageGmail(lead, settings) {
   if (!lead.email) return { ok: false, detail: 'lead has no email — Gmail skipped' };
+
+  // compose mode (default): a fresh compose with To/Subject/Body pre-filled
+  // via URL. No draft required, no Gmail DOM automation, and the content
+  // rides in the URL — so it survives a Google login redirect.
+  if ((settings.GMAIL_MODE || 'compose') === 'compose') {
+    const body = C.fillTemplate(
+      settings.EMAIL_BODY || C.TEMPLATES.EMAIL_BODY, lead.firstName);
+    const url = 'https://mail.google.com/mail/?view=cm&fs=1' +
+      '&to=' + encodeURIComponent(lead.email) +
+      '&su=' + encodeURIComponent(settings.GMAIL_DRAFT_SUBJECT || '') +
+      '&body=' + encodeURIComponent(body);
+    await chrome.tabs.create({ url, active: false });
+    return { ok: true, detail: 'compose opened with To/subject/body — review and press Send yourself' };
+  }
+
+  // draft mode: open the pre-made RSVP draft (rich formatting + image).
   let tab = await findTab(C.GMAIL.TAB_URL_PATTERN);
   if (!tab) {
     tab = await chrome.tabs.create({ url: C.GMAIL.URL, active: false });

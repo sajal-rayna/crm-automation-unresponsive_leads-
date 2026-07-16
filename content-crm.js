@@ -166,7 +166,8 @@
       if (optionKey || teach.descs.length === 1) {
         L.recordSelector(key, teach.descs[teach.descs.length - 1])
           .then(async () => { S.learned = await L.load(); })
-          .catch(() => {});
+          .catch((e) => pushLog('warn',
+            `Could not save the learning: ${String(e && e.message || e)}`));
       }
     };
     document.addEventListener('click', teach.handler, true);
@@ -188,10 +189,14 @@
     // (earlier clicks reopened the control). Everything else: the first click.
     const optionKey = key.startsWith('reason-option:') || key.startsWith('interest-chip:');
     const desc = optionKey ? descs[descs.length - 1] : descs[0];
-    await L.recordSelector(key, desc);
-    S.learned = await L.load();
-    pushLog('ok',
-      `Learned "${key}" -> "${(desc.text || desc.aria || desc.css).slice(0, 50)}" (used as fallback from now on)`);
+    try {
+      await L.recordSelector(key, desc);
+      S.learned = await L.load();
+      pushLog('ok',
+        `Learned "${key}" -> "${(desc.text || desc.aria || desc.css).slice(0, 50)}" (used as fallback from now on)`);
+    } catch (e) {
+      pushLog('warn', `Could not save the learning: ${String(e && e.message || e)}`);
+    }
   }
 
   // ---------------------------------------------------------------------------
