@@ -22,6 +22,12 @@ loads it from disk (don't delete it later).
      not the outer one, or you get *"Manifest file is missing or unreadable"*.
    - Don't browse *inside the zip* — Windows shows zips like folders, but
      Chrome can't load from one. Fully extract first (right-click → Extract All).
+   - **"The folder name is not valid"** means you selected the ZIP itself:
+     Windows hides file extensions, so the zip and the extracted folder show
+     the *same name* side by side (the zip has a zipper icon). Foolproof way:
+     extract to `C:\rayna`, open `C:\rayna\rayna-autodialer` in Explorer until
+     you see `manifest.json`, copy the path from the address bar (Ctrl+C), and
+     paste it into the Load-unpacked dialog's "Folder:" field (Ctrl+V).
 4. Pin **Rayna Auto-Dialer** from the puzzle-piece menu
 
 ## 3. Log into your three tabs
