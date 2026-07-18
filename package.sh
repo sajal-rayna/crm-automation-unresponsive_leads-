@@ -21,6 +21,7 @@ cp manifest.json config.js learning.js background.js \
   content-crm.js content-whatsapp.js content-gmail.js \
   sidepanel.html sidepanel.js options.html options.js \
   README.md TEAM-SETUP.md "$STAGE"/
+cp -r assets "$STAGE"/assets
 (cd dist && zip -qr "$(basename "$ZIP")" rayna-autodialer)
 rm -rf "$STAGE"
 

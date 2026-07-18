@@ -309,6 +309,30 @@ globalThis.RAYNA = (() => {
     "passcode will be emailed to you 24 to 48 hours before the event.\n\n" +
     "We look forward to hosting you.";
 
+  // Rich HTML version of the email, mirroring the VRS Consultant template doc
+  // (bold run-throughs, bullets, numbered steps). Staged over the plain URL
+  // body by a synthetic rich paste; the schedule image (bundled in assets/,
+  // overridable on the options page) is pasted under "Event Schedule:".
+  TEMPLATES.EMAIL_BODY_HTML =
+    '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222222;line-height:1.5">' +
+    '<p>Dear [Client Name],</p>' +
+    '<p>Thank you for confirming your RSVP for the Dubai Real Estate Virtual Roadshow on ' +
+    '<b>Saturday, July 25, 2026, from 11:00 AM – 4:30 PM CST</b>.</p>' +
+    '<p><b>Event Schedule:</b></p>' +
+    '<p><b>What to Expect:</b></p>' +
+    '<ul>' +
+    '<li><b>7 Top Developers:</b> Live presentations from Emaar, Nakheel, DAMAC, Binghatti, Sobha Realty, Danube, and Mantra.</li>' +
+    '<li><b>Exclusive Inventory:</b> Access to off-market project pre-launches and first-tier pricing.</li>' +
+    '<li><b>International Offers:</b> Specially curated interest-free payment plans and high-yield investment blueprints.</li>' +
+    '</ul>' +
+    '<p><b>Next Steps:</b></p>' +
+    '<ol>' +
+    '<li><b>Accept the Calendar Invite:</b> Please accept the digital calendar invitation sent to your email to lock this event into your schedule.</li>' +
+    '<li><b>Access Credentials:</b> Your unique secure streaming link and personal passcode will be emailed to you <b>24 to 48 hours before the event</b>.</li>' +
+    '</ol>' +
+    '<p>We look forward to hosting you.</p>' +
+    '</div>';
+
   // The scripts/templates above are the DEFAULTS; each user can override them
   // from the options page (stored per-browser in chrome.storage). An empty
   // options field falls back to these defaults.
@@ -384,7 +408,7 @@ globalThis.RAYNA = (() => {
     STT_TRANSCRIBE: 'RAYNA_STT_TRANSCRIBE', // CRM -> background (local Whisper POST)
     CAMPAIGN_PROBE: 'RAYNA_CAMPAIGN_PROBE', // CRM -> background (MAIN-world state read)
     WA_ATTACH: 'RAYNA_WA_ATTACH',           // background -> WhatsApp (paste stored image)
-    GMAIL_ATTACH: 'RAYNA_GMAIL_ATTACH',     // background -> Gmail (paste stored image)
+    GMAIL_RICH: 'RAYNA_GMAIL_RICH',         // background -> Gmail (rich body + image)
   };
 
   // Panel/hotkey commands understood by the CRM engine

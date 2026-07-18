@@ -23,7 +23,27 @@ const CONTENT_SCRIPT_SETS = [
   { pattern: () => C.GMAIL.TAB_URL_PATTERN, files: ['config.js', 'content-gmail.js'] },
 ];
 
+// The event-schedule graphic from the VRS template doc ships with the
+// extension; seed it as the default Gmail image so teammates get the designed
+// email with zero setup. An options-page upload always takes precedence.
+async function seedDefaultGmailImage() {
+  try {
+    const stored = await chrome.storage.local.get('RAYNA_IMAGES');
+    const imgs = stored.RAYNA_IMAGES || {};
+    if (imgs.gmail) return;
+    const resp = await fetch(chrome.runtime.getURL('assets/schedule.jpg'));
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    imgs.gmail = { name: 'schedule.jpg', dataUrl: 'data:image/jpeg;base64,' + btoa(bin) };
+    await chrome.storage.local.set({ RAYNA_IMAGES: imgs });
+  } catch (e) { /* optional nicety — uploads still work */ }
+}
+
 chrome.runtime.onInstalled.addListener(async () => {
+  seedDefaultGmailImage();
   for (const set of CONTENT_SCRIPT_SETS) {
     try {
       const tabs = await chrome.tabs.query({ url: set.pattern() });
@@ -162,20 +182,16 @@ async function prestageGmail(lead, settings) {
     '&su=' + encodeURIComponent(settings.GMAIL_DRAFT_SUBJECT || '') +
     '&body=' + encodeURIComponent(body);
   const composeTab = await chrome.tabs.create({ url, active: false });
-  // If a Gmail image is configured, paste it into the compose body inline.
-  const stored = await chrome.storage.local.get('RAYNA_IMAGES');
-  if (stored.RAYNA_IMAGES && stored.RAYNA_IMAGES.gmail) {
-    try {
-      const r = await withTimeout(
-        sendToTab(composeTab.id, { type: C.MSG.GMAIL_ATTACH },
-          { retries: 10, delayMs: 1500, files: ['config.js', 'content-gmail.js'] }),
-        45000, 'Gmail image insert');
-      return { ok: true, detail: `compose opened; ${(r && r.detail) || 'image insert attempted'} — press Send yourself` };
-    } catch (e) {
-      return { ok: true, detail: 'compose opened — image insert timed out, add it manually; press Send yourself' };
-    }
+  // Upgrade the plain URL body to the formatted template + schedule image.
+  try {
+    const r = await withTimeout(
+      sendToTab(composeTab.id, { type: C.MSG.GMAIL_RICH, firstName: lead.firstName },
+        { retries: 10, delayMs: 1500, files: ['config.js', 'content-gmail.js'] }),
+      45000, 'Gmail formatting');
+    return { ok: true, detail: `compose opened; ${(r && r.detail) || 'formatting attempted'} — press Send yourself` };
+  } catch (e) {
+    return { ok: true, detail: 'compose opened with the plain body (formatting timed out) — press Send yourself' };
   }
-  return { ok: true, detail: 'compose opened with To/subject/body — review and press Send yourself' };
 }
 
 // MV3 kills an idle service worker after ~30s, and merely awaiting a content
