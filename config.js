@@ -17,13 +17,8 @@ globalThis.RAYNA = (() => {
     MAX_LEADS: 0,                  // session cap, 0 = unlimited
     PREFILL_WHATSAPP_ON_MISS: false, // pre-fill "If Not Answered" WhatsApp on voicemail/no-answer
     WHATSAPP_MODE: 'existing_tab', // 'existing_tab' | 'wa_link'
-    // 'compose': open a fresh Gmail compose with To/Subject/Body pre-filled
-    //   via URL — needs no draft, no Gmail scripting, and survives a login
-    //   redirect (the content rides in the URL). Plain text only.
-    // 'draft': find + open the pre-made RSVP draft by subject (keeps rich
-    //   formatting and the schedule image; each user needs the draft in
-    //   their own Gmail).
-    GMAIL_MODE: 'compose',
+    // Subject of the pre-staged email (Pre-stage always opens a fresh Gmail
+    // compose — To/subject/body via URL, stored image pasted inline).
     GMAIL_DRAFT_SUBJECT:
       "RSVP Confirmed: First time ever meet the TOP Developers of Dubai Virtually",
 
@@ -235,47 +230,18 @@ globalThis.RAYNA = (() => {
   };
 
   // ---------------------------------------------------------------------------
-  // Gmail selectors (pre-stage only — we NEVER send).
-  // *** BRITTLE #2: the Gmail draft open + field edit. Gmail's DOM is obfuscated
-  // and changes; every selector here is a candidate list, and on ANY failure the
-  // content script falls back to just opening the Drafts view. ***
+  // Gmail (pre-stage only — we NEVER send). Pre-stage opens a fresh compose
+  // via URL (To/subject/body pre-filled), so the only DOM the extension
+  // touches in Gmail is the compose body, to paste the stored image inline.
   // ---------------------------------------------------------------------------
   const GMAIL = {
     HOST: 'mail.google.com',
     TAB_URL_PATTERN: '*://mail.google.com/*',
-    URL: 'https://mail.google.com/mail/u/0/',
-    DRAFTS_HASH: '#drafts',
-    searchHash: (subject) =>
-      '#search/' + encodeURIComponent(`in:draft subject:"${subject}"`),
-    RESULT_ROW: ['tr.zA', 'table[role="grid"] tr[role="row"]'],
-    COMPOSE_DIALOG: ['div[role="dialog"]'],
-    SUBJECT_FIELD: ['input[name="subjectbox"]', 'input[aria-label*="Subject" i]'],
-    // Recipient chips already committed in a compose's To line
-    RECIPIENT_CHIP: ['[email]', '[data-hovercard-id]'],
-    TO_FIELD: [
-      'div[role="dialog"] input[aria-label*="To" i]',
-      'div[role="dialog"] input[peoplekit-id]',
-      'div[role="dialog"] textarea[name="to"]',
-      'div[role="dialog"] div[name="to"] input',
-      'input[aria-label*="To recipients" i]',
-      'div[role="dialog"] input[role="combobox"]',
-      'input[role="combobox"][peoplekit-id]',
-    ],
-    // A draft with no recipients opens with the To row COLLAPSED into a
-    // "Recipients" strip — the input exists but is hidden until this is
-    // clicked. Candidates for that strip:
-    TO_ACTIVATOR: [
-      'div[aria-label*="Recipients" i]',
-      '.aoD.hl',
-      'div[role="region"][aria-label^="To" i]',
-    ],
     BODY_FIELD: [
       'div[role="dialog"] div[aria-label*="Message Body" i][contenteditable="true"]',
       'div[role="dialog"] div[g_editable="true"][contenteditable="true"]',
       'div[aria-label*="Message Body" i][contenteditable="true"]',
     ],
-    // Tokens in the draft body we replace with the lead's first name
-    NAME_TOKEN_RE: /\[(First\s*Name|FirstName|Client\s*Name)\]/gi,
     STEP_TIMEOUT_MS: 15000,
   };
 
@@ -323,8 +289,8 @@ globalThis.RAYNA = (() => {
       "to that before the 25th?",
   };
 
-  // Plain-text email body for GMAIL_MODE 'compose' (the rich version with the
-  // schedule image lives in the Gmail draft, for 'draft' mode).
+  // Plain-text email body for the pre-staged compose (the schedule image is
+  // uploaded on the options page and pasted inline after the compose opens).
   TEMPLATES.EMAIL_BODY =
     "Dear [Client Name],\n\n" +
     "Thank you for confirming your RSVP for the Dubai Real Estate Virtual " +
@@ -415,7 +381,6 @@ globalThis.RAYNA = (() => {
     STATUS: 'RAYNA_STATUS',             // CRM content script -> panel (broadcast)
     PRESTAGE: 'RAYNA_PRESTAGE',         // CRM content script -> background (orchestrate)
     WA_FILL: 'RAYNA_WA_FILL',           // background -> WhatsApp content script
-    GMAIL_PRESTAGE: 'RAYNA_GMAIL_PRESTAGE', // background -> Gmail content script
     STT_TRANSCRIBE: 'RAYNA_STT_TRANSCRIBE', // CRM -> background (local Whisper POST)
     CAMPAIGN_PROBE: 'RAYNA_CAMPAIGN_PROBE', // CRM -> background (MAIN-world state read)
     WA_ATTACH: 'RAYNA_WA_ATTACH',           // background -> WhatsApp (paste stored image)

@@ -149,50 +149,33 @@ async function prestageWhatsApp(lead, waText, settings) {
 async function prestageGmail(lead, settings) {
   if (!lead.email) return { ok: false, detail: 'lead has no email — Gmail skipped' };
 
-  // compose mode (default): a fresh compose with To/Subject/Body pre-filled
-  // via URL. No draft required, no Gmail DOM automation, and the content
-  // rides in the URL — so it survives a Google login redirect.
-  if ((settings.GMAIL_MODE || 'compose') === 'compose') {
-    const body = C.fillTemplate(
-      settings.EMAIL_BODY || C.TEMPLATES.EMAIL_BODY, lead.firstName);
-    const url = 'https://mail.google.com/mail/?view=cm&fs=1' +
-      '&to=' + encodeURIComponent(lead.email) +
-      '&su=' + encodeURIComponent(settings.GMAIL_DRAFT_SUBJECT || '') +
-      '&body=' + encodeURIComponent(body);
-    const composeTab = await chrome.tabs.create({ url, active: false });
-    // If a Gmail image is configured, paste it into the compose body inline.
-    const stored = await chrome.storage.local.get('RAYNA_IMAGES');
-    if (stored.RAYNA_IMAGES && stored.RAYNA_IMAGES.gmail) {
-      try {
-        const r = await withTimeout(
-          sendToTab(composeTab.id, { type: C.MSG.GMAIL_ATTACH },
-            { retries: 10, delayMs: 1500, files: ['config.js', 'content-gmail.js'] }),
-          45000, 'Gmail image insert');
-        return { ok: true, detail: `compose opened; ${(r && r.detail) || 'image insert attempted'} — press Send yourself` };
-      } catch (e) {
-        return { ok: true, detail: 'compose opened — image insert timed out, add it manually; press Send yourself' };
-      }
+  // Always a FRESH compose with To/Subject/Body pre-filled via URL. Nothing is
+  // consumed on send, there is no shared draft to maintain (or accidentally
+  // personalize forever), no Gmail DOM automation for the fields, and the
+  // content rides in the URL — so it survives a Google login redirect.
+  // (Draft mode was removed after live runs showed it mutating the shared
+  // template draft and fighting Gmail's recipient-field DOM.)
+  const body = C.fillTemplate(
+    settings.EMAIL_BODY || C.TEMPLATES.EMAIL_BODY, lead.firstName);
+  const url = 'https://mail.google.com/mail/?view=cm&fs=1' +
+    '&to=' + encodeURIComponent(lead.email) +
+    '&su=' + encodeURIComponent(settings.GMAIL_DRAFT_SUBJECT || '') +
+    '&body=' + encodeURIComponent(body);
+  const composeTab = await chrome.tabs.create({ url, active: false });
+  // If a Gmail image is configured, paste it into the compose body inline.
+  const stored = await chrome.storage.local.get('RAYNA_IMAGES');
+  if (stored.RAYNA_IMAGES && stored.RAYNA_IMAGES.gmail) {
+    try {
+      const r = await withTimeout(
+        sendToTab(composeTab.id, { type: C.MSG.GMAIL_ATTACH },
+          { retries: 10, delayMs: 1500, files: ['config.js', 'content-gmail.js'] }),
+        45000, 'Gmail image insert');
+      return { ok: true, detail: `compose opened; ${(r && r.detail) || 'image insert attempted'} — press Send yourself` };
+    } catch (e) {
+      return { ok: true, detail: 'compose opened — image insert timed out, add it manually; press Send yourself' };
     }
-    return { ok: true, detail: 'compose opened with To/subject/body — review and press Send yourself' };
   }
-
-  // draft mode: open the pre-made RSVP draft (rich formatting + image).
-  let tab = await findTab(C.GMAIL.TAB_URL_PATTERN);
-  if (!tab) {
-    tab = await chrome.tabs.create({ url: C.GMAIL.URL, active: false });
-    await new Promise((r) => setTimeout(r, 4000)); // let Gmail boot
-  }
-  // Budget > worst-case legitimate latency: ~32s per pre-stage (2 waits +
-  // sleeps) plus delivery retries while a just-created Gmail tab boots.
-  const res = await withTimeout(
-    sendToTab(tab.id, {
-      type: C.MSG.GMAIL_PRESTAGE,
-      email: lead.email,
-      firstName: lead.firstName,
-      subject: settings.GMAIL_DRAFT_SUBJECT,
-    }, { retries: 10, delayMs: 1500, files: ['config.js', 'content-gmail.js'] }),
-    90000, 'Gmail pre-stage');
-  return res || { ok: false, detail: 'no response from Gmail tab' };
+  return { ok: true, detail: 'compose opened with To/subject/body — review and press Send yourself' };
 }
 
 // MV3 kills an idle service worker after ~30s, and merely awaiting a content

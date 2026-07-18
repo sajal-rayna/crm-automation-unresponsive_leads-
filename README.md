@@ -22,7 +22,9 @@ human-judgment step and every "Send" action manual.
     Not interested stay available during the freeze** — stage drafts if the conversation
     turns interested, or log Not Interested and continue dialing if it turns out a no
     (no Resume needed).
-  - **Pre-stage** -> fills the WhatsApp "If Interested" message + opens the Gmail RSVP draft (never sends), then freezes.
+  - **Pre-stage** -> fills the WhatsApp "If Interested" message (+ flyer image) and opens
+    a fresh Gmail compose with To/subject/body pre-filled (+ schedule image) — never
+    sends — then freezes.
   - **Not interested** -> hangs up, sets the toggle to **Connected**, selects
     **"How interested?" = Not Interested** (connected outcomes use the chip row —
     the Reason dropdown only exists for Not Connected), saves, advances.
@@ -90,8 +92,7 @@ also force-install the extension org-wide via policy.
 | MAX_LEADS | 0 | Session cap (0 = unlimited) |
 | PREFILL_WHATSAPP_ON_MISS | false | Pre-fill the "If Not Answered" WhatsApp on voicemail/no-answer |
 | WHATSAPP_MODE | existing_tab | existing_tab (fill your open WhatsApp Web tab) or wa_link (open a /send link) |
-| GMAIL_MODE | compose | compose (fresh pre-filled compose, no draft needed) or draft (open the pre-made RSVP draft — rich formatting + image) |
-| GMAIL_DRAFT_SUBJECT | RSVP Confirmed: First time ever meet the TOP Developers of Dubai Virtually | Email subject (and, in draft mode, how the draft is found) |
+| GMAIL_DRAFT_SUBJECT | RSVP Confirmed: First time ever meet the TOP Developers of Dubai Virtually | Subject of the pre-staged compose (fresh compose every time — nothing is consumed on send) |
 
 Hotkeys — Voicemail `Alt+Shift+V`, Live `Alt+Shift+L`, Pre-stage `Alt+Shift+P`,
 Skip `Alt+Shift+S` (Resume and Quit have no default) — are configurable at
@@ -105,7 +106,7 @@ rayna-autodialer/
   background.js          # service worker: cross-tab relay + hotkey commands
   content-crm.js         # the engine: state machine, polling, CRM clicks (state lives here)
   content-whatsapp.js    # pre-stage only: fill "If Interested" template, never send
-  content-gmail.js       # pre-stage only: open RSVP draft, set To, personalize, never send
+  content-gmail.js       # pre-stage only: paste the stored image into the compose, never send
   sidepanel.html/.js     # UI: current lead, state+timer, buttons, tally
   options.html/.js       # config knobs above
   config.js              # SINGLE source of selectors + labels (edit here if CRM UI changes)
@@ -218,8 +219,9 @@ cue tags, decisions, and timings (no transcripts, no audio).
   pauses (it will not mis-log a lead that was never dialed or still on the line).
 - WhatsApp pre-stage only opens a search result that verifiably matches the lead (trailing
   phone digits or the lead's name in the row) — never "the first row".
-- Gmail pre-stage only edits the compose window whose Subject matches
-  `GMAIL_DRAFT_SUBJECT`; a pre-existing unrelated compose window is never touched.
+- Gmail pre-stage always opens a FRESH compose (To/subject/body via URL, stored image
+  pasted inline) — nothing is consumed on send, no shared draft exists to mutate, and a
+  pre-existing compose window is never touched.
 
 ## Troubleshooting
 

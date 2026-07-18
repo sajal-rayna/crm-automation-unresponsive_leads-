@@ -36,10 +36,8 @@ In the same Chrome profile, log into:
 
 - the CRM: `crm.rayna-properties.com`
 - WhatsApp Web: `web.whatsapp.com`
-- Gmail: `mail.google.com`. By default (Gmail mode = **compose**) no draft is
-  needed — Pre-stage opens a fresh compose with To/subject/body pre-filled.
-  Only if you switch to **draft** mode (rich formatting + the schedule image)
-  do you need the RSVP draft copied into your own Gmail Drafts.
+- Gmail: `mail.google.com`. No draft needed — Pre-stage opens a fresh compose
+  with To/subject/body pre-filled and your uploaded schedule image pasted in.
 
 ## 4. Personalize your options (right-click the icon → Options)
 
@@ -48,7 +46,7 @@ In the same Chrome profile, log into:
 | Ring timeout | Leave the team default; the tool will suggest a tuned value after ~20 answered calls |
 | Max leads per session | **5 for your first run**, then 0 (unlimited) |
 | WhatsApp mode | `wa_link` (works for cold numbers with no chat history) |
-| Gmail draft subject | Must match the RSVP draft in YOUR Gmail exactly |
+| Email subject | Subject line for the pre-staged email (team default is fine) |
 | **Scripts & templates** | **Put YOUR name in the WhatsApp "If Interested" intro** ("This is <your name>, from Rayna Properties…"). Adjust the call script if you have your own flow. `[Client Name]` is auto-replaced with the lead's first name. |
 
 Hotkeys (Voicemail / Live / Pre-stage / Skip / Not interested / Resume / Quit)

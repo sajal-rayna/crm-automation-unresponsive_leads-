@@ -55,19 +55,10 @@
     </select>
   </label>
 
-  <label>Gmail mode
-    <div class="help"><b>compose</b>: Pre-stage opens a fresh compose with To/subject/body
-      pre-filled — no draft needed, survives login, plain text (no image).
-      <b>draft</b>: opens your pre-made RSVP draft by subject — keeps rich formatting and
-      the schedule image, but the draft must exist in YOUR Gmail.</div>
-    <select id="GMAIL_MODE">
-      <option value="compose">compose (no draft needed)</option>
-      <option value="draft">draft (rich formatting + image)</option>
-    </select>
-  </label>
-
   <label>Email subject
-    <div class="help">Used as the compose subject — and, in draft mode, to find the draft.</div>
+    <div class="help">Subject of the pre-staged email. Pre-stage always opens a fresh
+      compose with To/subject/body pre-filled (and your uploaded image pasted in) —
+      nothing is consumed when you press Send.</div>
     <input type="text" id="GMAIL_DRAFT_SUBJECT" />
   </label>
 
