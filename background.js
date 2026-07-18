@@ -342,6 +342,61 @@ async function handleCampaignProbe(sender) {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-draft queue: one SEPARATE Gmail draft per No Answer / Voicemail lead.
+// Each queue item opens its own fresh background compose tab (a new compose
+// session = a new draft — never reused, so drafts can't merge), stages the
+// formatted invitation + schedule image, waits for Gmail's save indicator,
+// then closes the tab. Strictly serialized; the dialing loop never waits.
+// On any doubt about the save, the tab is LEFT OPEN instead of risking a
+// lost draft.
+// ---------------------------------------------------------------------------
+let draftQueue = Promise.resolve();
+
+async function createInvitationDraft(lead, settings) {
+  const plain = C.fillTemplate(
+    settings.EMAIL_NOANSWER_BODY || C.TEMPLATES.EMAIL_NOANSWER_BODY, lead.firstName);
+  const url = 'https://mail.google.com/mail/?view=cm&fs=1' +
+    '&to=' + encodeURIComponent(lead.email) +
+    '&su=' + encodeURIComponent(settings.EMAIL_NOANSWER_SUBJECT || '') +
+    '&body=' + encodeURIComponent(plain);
+  const tab = await chrome.tabs.create({ url, active: false });
+  try {
+    const r = await withTimeout(
+      sendToTab(tab.id, {
+        type: C.MSG.GMAIL_RICH,
+        firstName: lead.firstName,
+        template: 'noanswer',
+        ensureSaved: true,
+      }, { retries: 10, delayMs: 1500, files: ['config.js', 'content-gmail.js'] }),
+      60000, 'invitation draft');
+    if (r && r.ok && r.saved) {
+      await chrome.tabs.remove(tab.id).catch(() => {});
+      return { ok: true, detail: `invitation drafted for ${lead.name || lead.email}` };
+    }
+    return {
+      ok: false,
+      detail: `${(r && r.detail) || 'draft save not confirmed'} — compose tab left open, check it`,
+    };
+  } catch (e) {
+    return { ok: false, detail: 'draft staging timed out — compose tab left open, check it' };
+  }
+}
+
+function enqueueInvitationDraft(msg) {
+  const task = draftQueue.then(async () => {
+    const stopKeepAlive = keepAlive();
+    try {
+      const settings = msg.settings || (await C.getSettings());
+      return await createInvitationDraft(msg.lead, settings);
+    } finally {
+      stopKeepAlive();
+    }
+  });
+  draftQueue = task.catch(() => {}); // one failure must not jam the queue
+  return task;
+}
+
+// ---------------------------------------------------------------------------
 // Message routing
 // ---------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -371,6 +426,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === C.MSG.CAMPAIGN_PROBE) {
     handleCampaignProbe(_sender).then(sendResponse)
       .catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
+    return true; // async response
+  }
+
+  if (msg.type === C.MSG.DRAFT_MISS) {
+    enqueueInvitationDraft(msg).then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, detail: String(e && e.message || e) }));
     return true; // async response
   }
 

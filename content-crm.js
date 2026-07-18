@@ -48,6 +48,7 @@
     listen: { active: false, suggestion: null, cues: [], unavailable: false },
     campaignFound: null,  // {key, value} from script-scan / page-state probe
     showClickWarned: false, // Raw Source "Show" click warning logged this session
+    autodrafted: new Set(), // emails already queued for an invitation draft this session
   };
 
   function newTally() {
@@ -1183,6 +1184,28 @@
     }
   }
 
+  // Optional auto-draft: queue a personalized "You are Invited" Gmail draft
+  // for a No Answer / Voicemail lead. Fire-and-forget — the background worker
+  // serializes the queue and the dialing loop never waits on it. One draft
+  // per email per session.
+  function autodraftMiss(lead) {
+    if (!S.settings.AUTODRAFT_ON_MISS) return;
+    if (!lead.email) return;
+    const key = lead.email.toLowerCase();
+    if (S.autodrafted.has(key)) return;
+    S.autodrafted.add(key);
+    try {
+      chrome.runtime.sendMessage({
+        type: C.MSG.DRAFT_MISS,
+        lead,
+        settings: S.settings,
+      }).then((res) => {
+        if (res && res.ok) pushLog('ok', `✉️ ${res.detail}`);
+        else pushLog('warn', `✉️ Invitation draft: ${(res && res.detail) || 'failed'}`);
+      }).catch(() => {});
+    } catch (e) { /* context gone */ }
+  }
+
   // Optional "If Not Answered" WhatsApp pre-fill on voicemail / no-answer.
   // Fire-and-forget so it never blocks the dialing loop.
   function prestageMissWhatsApp(lead) {
@@ -1288,6 +1311,7 @@
         stopListening();
         await endCall();
         prestageMissWhatsApp(lead);
+        autodraftMiss(lead);
         // Logs No Answer by default (operator preference, matching the CRM's
         // own call status) — see CRM.VOICEMAIL_LOG_REASON in config.js.
         await logOutcome(C.CRM.VOICEMAIL_LOG_REASON);
@@ -1341,7 +1365,10 @@
       pushLog('info', `Call ended while ringing (no toast) -> ${reason}`);
     }
 
-    if (reason === C.REASONS.NO_ANSWER) prestageMissWhatsApp(lead);
+    if (reason === C.REASONS.NO_ANSWER) {
+      prestageMissWhatsApp(lead);
+      autodraftMiss(lead);
+    }
     await logOutcome(reason);
     bumpReasonTally(reason);
     await advance();
@@ -1382,6 +1409,7 @@
     S.tally = newTally();
     S.unmappedSeen = new Set();
     S.showClickWarned = false;
+    S.autodrafted = new Set();
     S.learned = await L.load();
     let version = '';
     try { version = chrome.runtime.getManifest().version; } catch (e) { /* n/a */ }

@@ -66,8 +66,10 @@
   // Upgrade the URL-filled plain body to the formatted template (bold
   // headings, bullets, numbered steps) and insert the schedule image under
   // "Event Schedule:". Everything is synthetic-paste/insertHTML — no clicks,
-  // no keys, and Send remains the human's.
-  async function stageRichBody(firstName) {
+  // no keys, and Send remains the human's. template: 'rsvp' (Pre-stage) or
+  // 'noanswer' (auto-draft invitation). ensureSaved: wait for Gmail's
+  // autosave indicator and report it, so the caller can safely close the tab.
+  async function stageRichBody(firstName, template, ensureSaved) {
     const t0 = Date.now();
     let body = null;
     while (Date.now() - t0 < 20000 && !body) {
@@ -79,9 +81,14 @@
     }
 
     const settings = await C.getSettings();
-    const html = C.fillTemplate(C.TEMPLATES.EMAIL_BODY_HTML, firstName);
+    const noanswer = template === 'noanswer';
+    const html = C.fillTemplate(
+      noanswer ? C.TEMPLATES.EMAIL_NOANSWER_HTML : C.TEMPLATES.EMAIL_BODY_HTML, firstName);
     const plain = C.fillTemplate(
-      settings.EMAIL_BODY || C.TEMPLATES.EMAIL_BODY, firstName);
+      noanswer
+        ? (settings.EMAIL_NOANSWER_BODY || C.TEMPLATES.EMAIL_NOANSWER_BODY)
+        : (settings.EMAIL_BODY || C.TEMPLATES.EMAIL_BODY),
+      firstName);
 
     // Replace the plain body: select-all + rich paste (Gmail's own rich-paste
     // path); if Gmail ignored the synthetic paste, fall back to insertHTML.
@@ -112,7 +119,21 @@
       await sleep(1200);
       imgNote = 'schedule image inserted';
     }
-    return { ok: true, detail: `formatted body staged; ${imgNote}` };
+
+    // Save verification for the auto-draft queue: only report saved=true once
+    // Gmail's own indicator confirms the draft exists.
+    let saved = false;
+    if (ensureSaved) {
+      const s0 = Date.now();
+      while (Date.now() - s0 < 12000 && !saved) {
+        saved = [...document.querySelectorAll('span, div')].some((el) =>
+          el.childElementCount === 0 && isVisible(el) &&
+          C.GMAIL.SAVED_RE.test((el.innerText || '').trim()));
+        if (!saved) await sleep(500);
+      }
+      if (saved) await sleep(800); // let the final autosave settle
+    }
+    return { ok: true, saved, detail: `formatted body staged; ${imgNote}` };
   }
 
   let queue = Promise.resolve();
@@ -120,7 +141,7 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || msg.type !== C.MSG.GMAIL_RICH) return false;
     queue = queue
-      .then(() => stageRichBody(msg.firstName || ''))
+      .then(() => stageRichBody(msg.firstName || '', msg.template || 'rsvp', !!msg.ensureSaved))
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, detail: String(e && e.message || e) }));
     return true; // async response

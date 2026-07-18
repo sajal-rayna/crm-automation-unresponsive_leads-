@@ -21,6 +21,14 @@ globalThis.RAYNA = (() => {
     // compose — To/subject/body via URL, stored image pasted inline).
     GMAIL_DRAFT_SUBJECT:
       "RSVP Confirmed: First time ever meet the TOP Developers of Dubai Virtually",
+    // Auto-draft the "You are Invited" email for No Answer / Voicemail leads:
+    // a background queue silently creates ONE SEPARATE Gmail draft per lead
+    // (fresh compose tab each time, closed after Gmail confirms the save).
+    // The dialing loop never waits on it. Drafts are reviewed and sent by the
+    // human from Gmail's Drafts folder.
+    AUTODRAFT_ON_MISS: false,
+    EMAIL_NOANSWER_SUBJECT:
+      'You are Invited: First time ever meet the TOP Developers of Dubai Virtually',
 
     // --- Call listening (beta, opt-in). Listens to YOUR microphone side of a
     // connected call, matches CALL_CUES against what you say, and shows outcome
@@ -242,6 +250,10 @@ globalThis.RAYNA = (() => {
       'div[role="dialog"] div[g_editable="true"][contenteditable="true"]',
       'div[aria-label*="Message Body" i][contenteditable="true"]',
     ],
+    // Gmail's autosave indicator in the compose header ("Saved" / "Draft
+    // saved") — proof the draft exists before the auto-draft queue closes
+    // its background tab.
+    SAVED_RE: /^(Saved|Draft saved)$/i,
     STEP_TIMEOUT_MS: 15000,
   };
 
@@ -333,6 +345,54 @@ globalThis.RAYNA = (() => {
     '<p>We look forward to hosting you.</p>' +
     '</div>';
 
+  // "Email (No Answer)" invitation from the VRS Consultant template doc —
+  // used by the auto-draft queue for No Answer / Voicemail leads.
+  TEMPLATES.EMAIL_NOANSWER_BODY =
+    "Dear [Client Name],\n\n" +
+    "You are invited to join us for an exclusive Multi-Developer virtual roadshow " +
+    "by top Dubai developers like EMAAR, NAKHEEL, DAMAC, SOBHA, BINGHATTI, DANUBE " +
+    "& MANTRA on Dubai Real Estate, taking place on July 25th. This is a unique " +
+    "opportunity brought to you by Rayna Properties, exclusively for our investors.\n\n" +
+    "📅 Date: July 25th, 2026\n" +
+    "🕒 Time: 11:00 AM CST and onwards\n" +
+    "📍 Official Meeting Link Coming Soon!\n\n" +
+    "Event Schedule:\n\n" +
+    "What You Can Expect:\n" +
+    "✅ Dedicated sessions by senior experts from the Top Developers\n" +
+    "🏗️ Explore world-class investment projects\n" +
+    "💰 Engage in one-on-one discussions with our dedicated project experts\n" +
+    "🌍 Take advantage of exclusive event offers, including flexible payment plans " +
+    "and unique inventory\n\n" +
+    "To secure your spot, respond to this email with your availability and " +
+    "preferred developer right away.\n" +
+    "Once confirmed, we will provide you with your official event pass and " +
+    "appointment details.\n\n" +
+    "We look forward to your participation!";
+
+  TEMPLATES.EMAIL_NOANSWER_HTML =
+    '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222222;line-height:1.5">' +
+    '<p>Dear [Client Name],</p>' +
+    '<p>You are invited to join us for an exclusive Multi-Developer virtual roadshow ' +
+    'by top Dubai developers like EMAAR, NAKHEEL, DAMAC, SOBHA, BINGHATTI, DANUBE ' +
+    '&amp; MANTRA on Dubai Real Estate, taking place on July 25th. This is a unique ' +
+    'opportunity brought to you by Rayna Properties, exclusively for our investors.</p>' +
+    '<p>📅 <b>Date:</b> July 25th, 2026<br>' +
+    '🕒 <b>Time:</b> 11:00 AM CST and onwards<br>' +
+    '📍 <b>Official Meeting Link Coming Soon!</b></p>' +
+    '<p><b>Event Schedule:</b></p>' +
+    '<p><b>What You Can Expect:</b></p>' +
+    '<p>✅ Dedicated sessions by senior experts from the Top Developers<br>' +
+    '🏗️ Explore world-class investment projects<br>' +
+    '💰 Engage in one-on-one discussions with our dedicated project experts<br>' +
+    '🌍 Take advantage of exclusive event offers, including flexible payment plans ' +
+    'and unique inventory</p>' +
+    '<p>To secure your spot, respond to this email with your availability and ' +
+    'preferred developer right away.<br>' +
+    'Once confirmed, we will provide you with your official event pass and ' +
+    'appointment details.</p>' +
+    '<p>We look forward to your participation!</p>' +
+    '</div>';
+
   // The scripts/templates above are the DEFAULTS; each user can override them
   // from the options page (stored per-browser in chrome.storage). An empty
   // options field falls back to these defaults.
@@ -341,6 +401,7 @@ globalThis.RAYNA = (() => {
     WA_IF_INTERESTED: TEMPLATES.IF_INTERESTED,
     WA_IF_NOT_ANSWERED: TEMPLATES.IF_NOT_ANSWERED,
     EMAIL_BODY: TEMPLATES.EMAIL_BODY,
+    EMAIL_NOANSWER_BODY: TEMPLATES.EMAIL_NOANSWER_BODY,
   });
 
   // Fill [Client Name]/[FirstName]-style tokens in a template.
@@ -409,6 +470,7 @@ globalThis.RAYNA = (() => {
     CAMPAIGN_PROBE: 'RAYNA_CAMPAIGN_PROBE', // CRM -> background (MAIN-world state read)
     WA_ATTACH: 'RAYNA_WA_ATTACH',           // background -> WhatsApp (paste stored image)
     GMAIL_RICH: 'RAYNA_GMAIL_RICH',         // background -> Gmail (rich body + image)
+    DRAFT_MISS: 'RAYNA_DRAFT_MISS',         // CRM -> background (queue invitation draft)
   };
 
   // Panel/hotkey commands understood by the CRM engine

@@ -62,6 +62,19 @@
     <input type="text" id="GMAIL_DRAFT_SUBJECT" />
   </label>
 
+  <label class="check">
+    <input type="checkbox" id="AUTODRAFT_ON_MISS" />
+    Auto-draft the "You are Invited" email for No Answer / Voicemail leads
+  </label>
+  <div class="help">While you keep dialing, a background queue silently creates ONE
+    separate, personalized Gmail draft per unanswered lead (formatted, with the schedule
+    image) and closes its tab once Gmail confirms the save. Review Drafts at the end of
+    the session and send them yourself — nothing is ever sent automatically.</div>
+
+  <label>Invitation email subject (No Answer / Voicemail drafts)
+    <input type="text" id="EMAIL_NOANSWER_SUBJECT" />
+  </label>
+
   <h2 style="margin-top:32px">Scripts &amp; message templates</h2>
   <div class="help">Personal to this browser — each team member sets their own (put YOUR
     name in the WhatsApp intro). <b>[Client Name]</b> is replaced with the lead's first
@@ -79,6 +92,10 @@
 
   <label>Email body (compose mode; plain text)
     <textarea id="EMAIL_BODY" style="min-height:180px"></textarea>
+  </label>
+
+  <label>Invitation email body (No Answer / Voicemail drafts; plain text)
+    <textarea id="EMAIL_NOANSWER_BODY" style="min-height:180px"></textarea>
   </label>
 
   <h2 style="margin-top:32px">Pre-stage images</h2>
