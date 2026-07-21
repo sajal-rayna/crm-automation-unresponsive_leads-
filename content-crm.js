@@ -1189,11 +1189,18 @@
   // serializes the queue and the dialing loop never waits on it. One draft
   // per email per session.
   function autodraftMiss(lead) {
-    if (!S.settings.AUTODRAFT_ON_MISS) return;
-    if (!lead.email) return;
+    if (!S.settings.AUTODRAFT_ON_MISS) return; // feature off — silent by design
+    if (!lead.email) {
+      pushLog('warn', '✉️ Invitation draft skipped — this lead has no email address');
+      return;
+    }
     const key = lead.email.toLowerCase();
-    if (S.autodrafted.has(key)) return;
+    if (S.autodrafted.has(key)) return; // already queued this lead this session
     S.autodrafted.add(key);
+    // Announce immediately so the queued state is visible right away — the
+    // actual draft finishes in the background ~30-60s later, and dialing
+    // continues meanwhile.
+    pushLog('info', `✉️ Queued invitation draft for ${lead.name || lead.email} — drafting in the background…`);
     try {
       chrome.runtime.sendMessage({
         type: C.MSG.DRAFT_MISS,
@@ -1202,8 +1209,10 @@
       }).then((res) => {
         if (res && res.ok) pushLog('ok', `✉️ ${res.detail}`);
         else pushLog('warn', `✉️ Invitation draft: ${(res && res.detail) || 'failed'}`);
-      }).catch(() => {});
-    } catch (e) { /* context gone */ }
+      }).catch((e) => pushLog('warn', `✉️ Invitation draft error: ${String(e && e.message || e)}`));
+    } catch (e) {
+      pushLog('warn', '✉️ Invitation draft could not be queued (extension context lost)');
+    }
   }
 
   // Optional "If Not Answered" WhatsApp pre-fill on voicemail / no-answer.
@@ -1464,6 +1473,11 @@
     if (learningOn()) {
       const tip = L.ringTimeoutTip(S.learned, S.settings.RING_TIMEOUT_MS);
       if (tip) pushLog('info', tip);
+    }
+    if (S.settings.AUTODRAFT_ON_MISS && S.autodrafted.size) {
+      pushLog('info',
+        `✉️ ${S.autodrafted.size} invitation draft(s) queued this session — any still finishing ` +
+        'will complete in the background; review them in Gmail → Drafts and send yourself.');
     }
   }
 
